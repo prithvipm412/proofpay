@@ -7,7 +7,7 @@ import { GenericContractsDeclaration } from "~~/utils/scaffold-eth/contract";
 const deployedContracts = {
   10143: {
     ProofPayEscrow: {
-      address: "0x3b639d7795e2788616cd45e162770ae4417dc20c",
+      address: "0x0f8ae1306c78fcf7bf998f8b8ee88add1bd7a0cf",
       abi: [
         {
           type: "constructor",
@@ -273,6 +273,19 @@ const deployedContracts = {
         },
         {
           type: "function",
+          name: "dispute",
+          inputs: [
+            {
+              name: "id",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
           name: "disputeWindow",
           inputs: [],
           outputs: [
@@ -283,6 +296,19 @@ const deployedContracts = {
             },
           ],
           stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "expireDispute",
+          inputs: [
+            {
+              name: "id",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [],
+          stateMutability: "nonpayable",
         },
         {
           type: "function",
@@ -403,10 +429,92 @@ const deployedContracts = {
         },
         {
           type: "function",
+          name: "recordVerdict",
+          inputs: [
+            {
+              name: "id",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "attempt",
+              type: "uint8",
+              internalType: "uint8",
+            },
+            {
+              name: "proofHash",
+              type: "bytes32",
+              internalType: "bytes32",
+            },
+            {
+              name: "pass",
+              type: "bool",
+              internalType: "bool",
+            },
+            {
+              name: "score",
+              type: "uint8",
+              internalType: "uint8",
+            },
+            {
+              name: "reason",
+              type: "string",
+              internalType: "string",
+            },
+          ],
+          outputs: [],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
+          name: "refund",
+          inputs: [
+            {
+              name: "id",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
+          name: "release",
+          inputs: [
+            {
+              name: "id",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
           name: "renounceOwnership",
           inputs: [],
           outputs: [],
           stateMutability: "pure",
+        },
+        {
+          type: "function",
+          name: "resolveDispute",
+          inputs: [
+            {
+              name: "id",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "payWorker",
+              type: "bool",
+              internalType: "bool",
+            },
+          ],
+          outputs: [],
+          stateMutability: "nonpayable",
         },
         {
           type: "function",
@@ -493,6 +601,19 @@ const deployedContracts = {
         },
         {
           type: "function",
+          name: "withdraw",
+          inputs: [
+            {
+              name: "to",
+              type: "address",
+              internalType: "address payable",
+            },
+          ],
+          outputs: [],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
           name: "withdrawable",
           inputs: [
             {
@@ -509,6 +630,51 @@ const deployedContracts = {
             },
           ],
           stateMutability: "view",
+        },
+        {
+          type: "event",
+          name: "DisputeExpired",
+          inputs: [
+            {
+              name: "id",
+              type: "uint256",
+              indexed: true,
+              internalType: "uint256",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "DisputeResolved",
+          inputs: [
+            {
+              name: "id",
+              type: "uint256",
+              indexed: true,
+              internalType: "uint256",
+            },
+            {
+              name: "payWorker",
+              type: "bool",
+              indexed: false,
+              internalType: "bool",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "Disputed",
+          inputs: [
+            {
+              name: "id",
+              type: "uint256",
+              indexed: true,
+              internalType: "uint256",
+            },
+          ],
+          anonymous: false,
         },
         {
           type: "event",
@@ -594,6 +760,56 @@ const deployedContracts = {
         },
         {
           type: "event",
+          name: "Refunded",
+          inputs: [
+            {
+              name: "id",
+              type: "uint256",
+              indexed: true,
+              internalType: "uint256",
+            },
+            {
+              name: "poster",
+              type: "address",
+              indexed: true,
+              internalType: "address",
+            },
+            {
+              name: "amount",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "Released",
+          inputs: [
+            {
+              name: "id",
+              type: "uint256",
+              indexed: true,
+              internalType: "uint256",
+            },
+            {
+              name: "worker",
+              type: "address",
+              indexed: true,
+              internalType: "address",
+            },
+            {
+              name: "amount",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
           name: "TaskAccepted",
           inputs: [
             {
@@ -656,6 +872,49 @@ const deployedContracts = {
         },
         {
           type: "event",
+          name: "VerdictRecorded",
+          inputs: [
+            {
+              name: "id",
+              type: "uint256",
+              indexed: true,
+              internalType: "uint256",
+            },
+            {
+              name: "attempt",
+              type: "uint8",
+              indexed: false,
+              internalType: "uint8",
+            },
+            {
+              name: "proofHash",
+              type: "bytes32",
+              indexed: false,
+              internalType: "bytes32",
+            },
+            {
+              name: "pass",
+              type: "bool",
+              indexed: false,
+              internalType: "bool",
+            },
+            {
+              name: "score",
+              type: "uint8",
+              indexed: false,
+              internalType: "uint8",
+            },
+            {
+              name: "reason",
+              type: "string",
+              indexed: false,
+              internalType: "string",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
           name: "VerifierChanged",
           inputs: [
             {
@@ -674,8 +933,53 @@ const deployedContracts = {
           anonymous: false,
         },
         {
+          type: "event",
+          name: "Withdrawn",
+          inputs: [
+            {
+              name: "from",
+              type: "address",
+              indexed: true,
+              internalType: "address",
+            },
+            {
+              name: "to",
+              type: "address",
+              indexed: true,
+              internalType: "address",
+            },
+            {
+              name: "amount",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+          ],
+          anonymous: false,
+        },
+        {
           type: "error",
           name: "AmountTooLow",
+          inputs: [],
+        },
+        {
+          type: "error",
+          name: "ArbitrationClosed",
+          inputs: [],
+        },
+        {
+          type: "error",
+          name: "ArbitrationNotExpired",
+          inputs: [],
+        },
+        {
+          type: "error",
+          name: "DisputeWindowClosed",
+          inputs: [],
+        },
+        {
+          type: "error",
+          name: "DisputeWindowOpen",
           inputs: [],
         },
         {
@@ -695,7 +999,22 @@ const deployedContracts = {
         },
         {
           type: "error",
+          name: "NotPoster",
+          inputs: [],
+        },
+        {
+          type: "error",
+          name: "NotVerifier",
+          inputs: [],
+        },
+        {
+          type: "error",
           name: "NotWorker",
+          inputs: [],
+        },
+        {
+          type: "error",
+          name: "NothingToWithdraw",
           inputs: [],
         },
         {
@@ -732,12 +1051,32 @@ const deployedContracts = {
         },
         {
           type: "error",
+          name: "RefundNotAvailable",
+          inputs: [],
+        },
+        {
+          type: "error",
           name: "RenounceDisabled",
           inputs: [],
         },
         {
           type: "error",
+          name: "ReviewClosed",
+          inputs: [],
+        },
+        {
+          type: "error",
           name: "SameAsBefore",
+          inputs: [],
+        },
+        {
+          type: "error",
+          name: "ScoreTooHigh",
+          inputs: [],
+        },
+        {
+          type: "error",
+          name: "StaleVerdict",
           inputs: [],
         },
         {
@@ -758,6 +1097,11 @@ const deployedContracts = {
         {
           type: "error",
           name: "TooManyAttempts",
+          inputs: [],
+        },
+        {
+          type: "error",
+          name: "TransferFailed",
           inputs: [],
         },
         {
@@ -788,7 +1132,7 @@ const deployedContracts = {
         },
       ],
       inheritedFunctions: {},
-      deploymentFile: "run-1791119957274.json",
+      deploymentFile: "run-1791124253671.json",
       deploymentScript: "Deploy.s.sol",
     },
   },
