@@ -6,16 +6,20 @@ anvil-like values (chain 31337) and the public default anvil verifier address on
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 import pathlib
 import shutil
+from types import SimpleNamespace
 
+import httpx
+import openai
 import pytest
 
-from app.chain import Block, ChainEvent, STATUS_NAMES
+from app.chain import Block, ChainEvent, ReadonlyError, Receipt, STATUS_NAMES
 from app.config import load_settings
-from app.images import ReceivedFile, decode_file, sha256_file
+from app.images import ReceivedFile, decode_file, model_input_file, sha256_file
 from app.storage import Storage
 
 FIXTURES = pathlib.Path(__file__).resolve().parent / "fixtures"
@@ -71,6 +75,12 @@ def inproc_decoder(path, preview_path=None) -> dict:
     return decode_file(str(path), str(preview_path) if preview_path else None)
 
 
+def inproc_model_input(src, out_path) -> bytes:
+    """model_input_in_child without a child process."""
+    model_input_file(str(src), str(out_path))
+    return pathlib.Path(out_path).read_bytes()
+
+
 class FakeChain:
     """In-memory chain with the same read interface as app.chain.Chain."""
 
@@ -89,6 +99,16 @@ class FakeChain:
         self.fail_events_at: int | None = None
         self.t0 = 1_791_000_000
         self.mine(first_block + START_BLOCK + 5)
+        # Transactions (M4). Fake signing; the "contract" logic is in _execute.
+        self.can_sign = True
+        self.nonces: dict[str, int] = {}
+        self.pending_extra = 0  # pending nonce - latest nonce
+        self.signed: list[dict] = []  # each build_verdict call
+        self.sent: list[str] = []  # each send_raw call
+        self.receipts: dict[str, Receipt] = {}
+        self.auto_mine = True  # send_raw includes the transaction at once
+        self.receipt_final = True
+        self.send_error: Exception | None = None
 
     def _hash(self, n: int) -> str:
         return "0x" + hashlib.sha256(f"{self.salt}:{n}".encode()).hexdigest()
@@ -157,12 +177,90 @@ class FakeChain:
     def get_task(self, task_id: int) -> dict:
         return dict(self.tasks[task_id])
 
+    def latest_time(self) -> int:
+        return self.blocks[-1].timestamp
+
+    def nonce(self, address: str, tag: str = "latest") -> int:
+        n = self.nonces.get(address, 0)
+        return n + (self.pending_extra if tag == "pending" else 0)
+
+    def build_verdict(self, key, nonce, task_id, attempt, proof_hash, passed, score, reason):
+        if not self.can_sign:
+            raise ReadonlyError("readonly")
+        tx = {"nonce": nonce, "id": task_id, "attempt": attempt, "proofHash": proof_hash, "pass": passed,
+              "score": score, "reason": reason}
+        raw = "0x" + json.dumps(tx, sort_keys=True).encode().hex()
+        self.signed.append(tx)
+        return raw, self.tx_hash(raw)
+
+    @staticmethod
+    def tx_hash(raw: str) -> str:
+        return "0x" + hashlib.sha256(raw.encode()).hexdigest()
+
+    def send_raw(self, raw: str) -> str:
+        if not self.can_sign:
+            raise ReadonlyError("readonly")
+        self.sent.append(raw)
+        if self.send_error is not None:
+            raise self.send_error
+        h = self.tx_hash(raw)
+        if self.auto_mine and h not in self.receipts:
+            self.include(raw)
+        return h
+
+    def include(self, raw: str) -> Receipt | None:
+        """Put a signed transaction in a block, like the contract (C-16). None IF the nonce is wrong."""
+        tx = json.loads(bytes.fromhex(raw[2:]))
+        sender = self.verifier_address
+        if tx["nonce"] != self.nonces.get(sender, 0):
+            return None
+        self.nonces[sender] = tx["nonce"] + 1
+        h = self.tx_hash(raw)
+        t = self.tasks.get(tx["id"])
+        b = self.mine()
+        ok = (
+            t is not None
+            and t["status"] == "Submitted"
+            and t["attempts"] == tx["attempt"]
+            and t["proofHash"] == tx["proofHash"]
+            and b.timestamp < t["reviewBy"]
+        )
+        events = []
+        if ok:
+            t["status"] = "Approved" if tx["pass"] else "Accepted"
+            t["score"] = tx["score"]
+            ev = ChainEvent("VerdictRecorded", b.number, 0, 0, h, {
+                "id": tx["id"], "attempt": tx["attempt"], "proofHash": tx["proofHash"], "pass": tx["pass"],
+                "score": tx["score"], "reason": tx["reason"]})
+            self.events_list.append(ev)
+            events.append(ev)
+        r = Receipt(h, 1 if ok else 0, b.number, True, events)
+        self.receipts[h] = r
+        return r
+
+    def use_nonce_elsewhere(self) -> None:
+        """Another transaction from the signer used the next nonce (V-T8)."""
+        self.nonces[self.verifier_address] = self.nonces.get(self.verifier_address, 0) + 1
+        self.mine()
+
+    def receipt(self, tx_hash: str) -> Receipt | None:
+        r = self.receipts.get(tx_hash)
+        return dataclasses.replace(r, finalized=self.receipt_final) if r else None
+
+    def set_time(self, ts: int) -> None:
+        """Mine one block at chain time ts."""
+        n = len(self.blocks)
+        self.blocks.append(Block(n, self._hash(n), ts))
+
     # ---- helpers for tests
-    def create_task(self, task_id: int, before_hash: str, created_at: int | None = None) -> ChainEvent:
+    def create_task(
+        self, task_id: int, before_hash: str, created_at: int | None = None, poster: str = "0x" + "11" * 20,
+        title: str | None = None, description: str = "Fixture task",
+    ) -> ChainEvent:
         ev = self.emit(
             "TaskCreated",
             id=task_id,
-            poster="0x" + "11" * 20,
+            poster=poster,
             amount=5 * 10**16,
             beforeHash=before_hash,
             submitBy=self.t0 + 10_000,
@@ -174,10 +272,18 @@ class FakeChain:
             "createdAt": created_at if created_at is not None else self.blocks[-1].timestamp,
             "attempts": 0,
             "status": STATUS_NAMES[0],
-            "title": f"Task {task_id}",
-            "description": "Fixture task",
+            "title": title if title is not None else f"Task {task_id}",
+            "description": description,
+            "submitBy": self.t0 + 10_000,
+            "reviewBy": self.t0 + 10_300,
+            "poster": poster,
+            "score": 0,
         }
         return ev
+
+    def accept_task(self, task_id: int, worker: str = "0x" + "22" * 20) -> ChainEvent:
+        self.tasks[task_id].update(status="Accepted", worker=worker)
+        return self.emit("TaskAccepted", id=task_id, worker=worker)
 
     def submit_proof(self, task_id: int, attempt: int, proof_hash: str) -> ChainEvent:
         self.tasks[task_id].update(proofHash=proof_hash, attempts=attempt, status="Submitted")
@@ -188,6 +294,54 @@ class FakeChain:
             "VerdictRecorded", id=task_id, attempt=attempt, proofHash=proof_hash, **{"pass": passed},
             score=score, reason="test",
         )
+
+
+class FakeModel:
+    """OpenAI-compatible client stand-in. `replies` items: a reply text, or an exception to raise."""
+
+    def __init__(self, replies=None, default: str | None = None):
+        self.replies = list(replies or [])
+        self.default = default
+        self.calls: list[dict] = []
+        self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
+
+    def _create(self, **kwargs):
+        self.calls.append(kwargs)
+        item = self.replies.pop(0) if self.replies else self.default
+        if item is None:
+            raise AssertionError("unexpected model call")
+        if isinstance(item, Exception):
+            raise item
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content=item), finish_reason="stop")],
+            usage=SimpleNamespace(completion_tokens=20),
+        )
+
+
+def model_reply(completed=True, same=True, confidence=86, reason="The litter is gone.") -> str:
+    return json.dumps({"task_completed": completed, "same_location": same, "confidence": confidence, "reason": reason})
+
+
+def http_error(status: int) -> openai.APIStatusError:
+    req = httpx.Request("POST", "https://example.invalid/v1/chat/completions")
+    return openai.APIStatusError(f"HTTP {status}", response=httpx.Response(status, request=req), body=None)
+
+
+def timeout_error() -> openai.APITimeoutError:
+    return openai.APITimeoutError(request=httpx.Request("POST", "https://example.invalid/v1/chat/completions"))
+
+
+class FakeReadiness:
+    def __init__(self, ready: bool = True):
+        self.ready = ready
+        self.refreshes = 0
+
+    def snapshot(self) -> dict:
+        return {"ready": self.ready}
+
+    def refresh(self) -> dict:
+        self.refreshes += 1
+        return {"ready": self.ready}
 
 
 @pytest.fixture

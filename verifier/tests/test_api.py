@@ -118,7 +118,7 @@ def test_V10_unknown_or_bad_hash_404(client, bad):
 
 def test_V08_health_shape_and_503_without_worker_loop(client):
     r = client.get("/health")
-    assert r.status_code == 503  # the worker loop comes in M4 (V-R9)
+    assert r.status_code == 503  # no loops run in this test (V-R9)
     body = r.json()
     for key in ("ready", "mode", "deploymentId", "model", "historyStatus", "eventLagBlocks",
                 "oldestEligibleJobAgeSec", "unsettledJobs", "heartbeatAgeSec", "warnings", "failed"):

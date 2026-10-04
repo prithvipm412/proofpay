@@ -26,7 +26,7 @@ MAX_LAG_S = 30  # V-R7
 MAX_BATCHES_PER_SCAN = 50  # keeps the heartbeat fresh during a long rebuild
 CLEANUP_INTERVAL_S = 600  # V-S8
 
-# Admission hook (V-A, M4). Returns (job state, reason). M3: every job is queued.
+# Admission hook (V-A). Called inside the batch transaction for a new job. Returns (job state, reason).
 Admit = Callable[[sqlite3.Connection, ChainEvent], tuple[str, str | None]]
 
 
@@ -71,6 +71,7 @@ class EventReader:
         """V-E5: clear claims and scan again from START_BLOCK. Jobs rows are kept."""
         with self.storage.tx() as c:
             c.execute("DELETE FROM claims")
+            c.execute("DELETE FROM parties")
             c.execute("DELETE FROM meta WHERE key = 'restored'")
             Storage.set_meta(
                 c,
@@ -128,6 +129,16 @@ class EventReader:
                 "INSERT INTO claims (task_id, attempt, role, sha256, state, event_id)"
                 " VALUES (?, 0, 'before', ?, 'history', ?) ON CONFLICT DO NOTHING",
                 (task_id, a["beforeHash"], ev.event_id),
+            )
+            c.execute(
+                "INSERT INTO parties (task_id, poster) VALUES (?, ?) ON CONFLICT DO NOTHING",
+                (task_id, str(a["poster"]).lower()),
+            )
+        elif ev.name == "TaskAccepted":
+            c.execute(
+                "INSERT INTO parties (task_id, worker) VALUES (?, ?)"
+                " ON CONFLICT (task_id) DO UPDATE SET worker = excluded.worker",
+                (task_id, str(a["worker"]).lower()),
             )
         elif ev.name == "ProofSubmitted":
             attempt = int(a["attempt"])

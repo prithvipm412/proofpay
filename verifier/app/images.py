@@ -170,6 +170,40 @@ def _decode_child(src: str, preview_path: str | None, conn) -> None:
         conn.close()
 
 
+def model_input_file(src: str, out_path: str) -> None:
+    """V-P3: write the model input JPEG of a stored original (canonical image, long side 1280, quality 85)."""
+    Image.MAX_IMAGE_PIXELS = MAX_PIXELS  # V-L2
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", Image.DecompressionBombWarning)
+        try:
+            img = Image.open(src, formats=tuple(FORMAT_EXT))
+        except Exception:
+            raise ImageRejected("File is not a JPEG, PNG or WebP image")
+        with img:
+            img.load()
+            canon = canonical_image(img)
+    pathlib.Path(out_path).write_bytes(model_jpeg(canon))
+
+
+def _model_input_child(src: str, out_path: str, conn) -> None:
+    """Child process entry point for the model input (top level for spawn)."""
+    try:
+        model_input_file(src, out_path)
+        conn.send(("ok", {}))
+    except ImageRejected as exc:
+        conn.send(("rejected", str(exc)))
+    except Exception as exc:
+        conn.send(("rejected", f"Image could not be decoded ({type(exc).__name__})"))
+    finally:
+        conn.close()
+
+
+def model_input_in_child(src: pathlib.Path, out_path: pathlib.Path) -> bytes:
+    """V-P3 and V-L5: make the model input in a spawned child and return the JPEG bytes."""
+    decode_in_child(src, out_path, target=_model_input_child)
+    return out_path.read_bytes()
+
+
 _slots = threading.BoundedSemaphore(DECODE_SLOTS)
 
 

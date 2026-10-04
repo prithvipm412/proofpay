@@ -302,6 +302,13 @@ def test_chain_decodes_real_abi_logs(monkeypatch):
         },
         {
             "address": ESCROW,
+            "topics": [topic("TaskAccepted(uint256,address)"), word(7), HexBytes(bytes(12) + bytes.fromhex("bb" * 20))],
+            "data": HexBytes(b""),
+            "blockNumber": 49, "transactionIndex": 1, "logIndex": 0,
+            "transactionHash": HexBytes("0x" + "ce" * 32), "blockHash": HexBytes("0x" + "02" * 32), "removed": False,
+        },
+        {
+            "address": ESCROW,
             "topics": [topic("ProofSubmitted(uint256,uint8,bytes32)"), word(7)],
             "data": HexBytes(encode(["uint8", "bytes32"], [1, bytes.fromhex("22" * 32)])),
             "blockNumber": 50, "transactionIndex": 0, "logIndex": 2,
@@ -316,9 +323,10 @@ def test_chain_decodes_real_abi_logs(monkeypatch):
 
     monkeypatch.setattr(chain.w3.eth, "get_logs", fake_get_logs)
     events = chain.events(49, 50)
-    assert len(seen["topics"][0]) == 3 and seen["address"] == Web3.to_checksum_address(ESCROW)
-    assert [e.name for e in events] == ["TaskCreated", "ProofSubmitted", "VerdictRecorded"]
-    created, proof, verdict = events
+    assert len(seen["topics"][0]) == 4 and seen["address"] == Web3.to_checksum_address(ESCROW)
+    assert [e.name for e in events] == ["TaskCreated", "TaskAccepted", "ProofSubmitted", "VerdictRecorded"]
+    created, accepted, proof, verdict = events
+    assert accepted.args == {"id": 7, "worker": Web3.to_checksum_address("0x" + "bb" * 20)}
     assert created.args == {
         "id": 7, "poster": Web3.to_checksum_address(poster), "amount": 5 * 10**16,
         "beforeHash": "0x" + "11" * 32, "submitBy": 1000, "reviewBy": 1300,

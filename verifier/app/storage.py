@@ -21,7 +21,7 @@ from typing import Callable, Iterator
 
 from .images import EXTENSIONS, MAX_UPLOAD_BYTES, ReceivedFile, UploadError, remove_quietly
 
-SCHEMA_VERSION = "1"
+SCHEMA_VERSION = "2"  # 2: parties table (M4). A folder with an older version is rebuilt (V-E5).
 MB = 1024 * 1024
 STORAGE_RESERVE_BYTES = 300 * MB  # V-S7
 CLEANUP_AGE_S = 24 * 3600  # V-S8
@@ -76,6 +76,11 @@ CREATE TABLE IF NOT EXISTS jobs (
     updated_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS jobs_state ON jobs (state);
+CREATE TABLE IF NOT EXISTS parties (  -- poster and worker of each task, from events (V-A1)
+    task_id INTEGER PRIMARY KEY,
+    poster TEXT,
+    worker TEXT
+);
 CREATE TABLE IF NOT EXISTS counters (
     day TEXT NOT NULL,
     key TEXT NOT NULL,
@@ -101,6 +106,24 @@ def norm_hash(value: str) -> str:
 
 def now_s() -> int:
     return int(time.time())
+
+
+def utc_day(ts: int) -> str:
+    """The UTC day of a Unix time, for the daily counters (V-A2)."""
+    return time.strftime("%Y-%m-%d", time.gmtime(ts))
+
+
+def counter(conn: sqlite3.Connection, day: str, key: str) -> int:
+    row = conn.execute("SELECT value FROM counters WHERE day = ? AND key = ?", (day, key)).fetchone()
+    return int(row[0]) if row else 0
+
+
+def bump(conn: sqlite3.Connection, day: str, key: str, n: int = 1) -> None:
+    conn.execute(
+        "INSERT INTO counters (day, key, value) VALUES (?, ?, ?)"
+        " ON CONFLICT (day, key) DO UPDATE SET value = value + excluded.value",
+        (day, key, n),
+    )
 
 
 class Storage:
@@ -175,6 +198,9 @@ class Storage:
                     f"Data folder {self.data_dir} belongs to deployment {row['value']}, "
                     f"not {self.deployment_id}. Stop."
                 )
+            elif self.meta(c).get("schemaVersion") != SCHEMA_VERSION:
+                # New projections (for example parties) are filled only by a full rebuild (V-E5).
+                self.set_meta(c, schemaVersion=SCHEMA_VERSION, historyStatus="rebuilding")
 
     def meta(self, conn: sqlite3.Connection | None = None) -> dict[str, str]:
         if conn is not None:

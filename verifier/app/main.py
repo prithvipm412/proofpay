@@ -1,4 +1,4 @@
-"""ProofPay verifier: FastAPI routes and process start (V-01..V-10).
+"""ProofPay verifier: FastAPI routes and process start (V-01..V-13).
 
 Run (from verifier/):
     .venv/bin/python -m app.main            # 127.0.0.1:8000, one process, one worker (V-01)
@@ -23,13 +23,17 @@ from typing import Callable
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
+from slowapi.errors import RateLimitExceeded
 from starlette.concurrency import run_in_threadpool
 
 from .config import ConfigError, Settings, environment, load_settings
 from .events import EventReader
-from .images import ImageRejected, UploadError, decode_in_child, receive_upload
+from .images import ImageRejected, UploadError, decode_in_child, model_input_in_child, receive_upload
+from .jobs import Worker, attempts_of_task, build_report, current_job
+from .limits import UPLOAD_LIMIT, VERIFY_LIMIT, Admission, Budget, make_limiter
 from .readiness import Readiness, SignerLockError, acquire_signer_lock
 from .storage import DataFolderError, Storage, norm_hash
+from .vision import Vision
 
 log = logging.getLogger("proofpay")
 
@@ -47,6 +51,7 @@ class Services:
     chain: object
     reader: EventReader
     readiness: Readiness
+    worker: Worker
     lock_fd: int | None
     decoder: Callable = decode_in_child
 
@@ -56,7 +61,13 @@ class Services:
             self.lock_fd = None
 
 
-def prepare(settings: Settings, chain, decoder: Callable = decode_in_child) -> Services:
+def prepare(
+    settings: Settings,
+    chain,
+    decoder: Callable = decode_in_child,
+    vision_client=None,
+    model_input: Callable = model_input_in_child,
+) -> Services:
     """All startup checks that must pass before the API serves (V-03, V-R5, V-07, V-CFG3, V-E5)."""
     try:
         chain_id = chain.chain_id()
@@ -74,14 +85,19 @@ def prepare(settings: Settings, chain, decoder: Callable = decode_in_child) -> S
     storage.open()  # V-R5
     lock_fd = acquire_signer_lock(settings.data_dir) if settings.live else None  # V-07
     try:
-        reader = EventReader(settings, storage, chain)
+        reader = EventReader(settings, storage, chain, admit=Admission(settings))  # V-A
         reader.startup()  # V-E5
     except Exception:
         if lock_fd is not None:
             os.close(lock_fd)
         raise
-    readiness = Readiness(settings, storage, chain, reader)
-    return Services(settings, storage, chain, reader, readiness, lock_fd, decoder)
+    budget = Budget(settings, storage)
+    vision = Vision(settings, budget.count_model_call, client=vision_client)
+    worker_box: list[Worker] = []
+    readiness = Readiness(settings, storage, chain, reader, worker_heartbeat=lambda: worker_box[0].heartbeat)
+    worker = Worker(settings, storage, chain, vision, budget, readiness, decode=decoder, model_input=model_input)
+    worker_box.append(worker)
+    return Services(settings, storage, chain, reader, readiness, worker, lock_fd, decoder)
 
 
 def create_app(services: Services, start_threads: bool = True) -> FastAPI:
@@ -91,7 +107,11 @@ def create_app(services: Services, start_threads: bool = True) -> FastAPI:
     async def lifespan(app: FastAPI):
         threads = []
         if start_threads:
-            for name, target in (("event-reader", services.reader.run), ("readiness", services.readiness.run)):
+            for name, target in (
+                ("event-reader", services.reader.run),
+                ("worker-loop", services.worker.run),
+                ("readiness", services.readiness.run),
+            ):
                 t = threading.Thread(target=target, name=name, daemon=True)
                 t.start()
                 threads.append(t)
@@ -100,12 +120,19 @@ def create_app(services: Services, start_threads: bool = True) -> FastAPI:
             yield
         finally:
             services.reader.stop()
+            services.worker.stop()
             services.readiness.stop()
             for t in threads:
                 t.join(timeout=15)
             services.close()
 
     app = FastAPI(title="ProofPay verifier", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+    limiter = make_limiter()  # V-A6
+    app.state.limiter = limiter
+
+    @app.exception_handler(RateLimitExceeded)
+    def rate_limited(request: Request, exc: RateLimitExceeded):
+        return JSONResponse({"error": "Too many requests. Try again later."}, status_code=429)
     app.add_middleware(
         CORSMiddleware,  # V-05. CORS is not access control.
         allow_origins=list(s.cors_origins),
@@ -119,6 +146,7 @@ def create_app(services: Services, start_threads: bool = True) -> FastAPI:
         return JSONResponse(snap, status_code=200 if snap["ready"] else 503)
 
     @app.post("/upload")  # V-09
+    @limiter.limit(UPLOAD_LIMIT)
     async def upload(request: Request):
         if datetime.now(timezone.utc) >= s.admission_until:  # V-S9
             return JSONResponse({"error": "Uploads are closed for this demo"}, status_code=410)
@@ -149,6 +177,32 @@ def create_app(services: Services, start_threads: bool = True) -> FastAPI:
             path, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=31536000, immutable"}
         )
 
+    @app.post("/verify")  # V-11: never makes a job, never writes to the chain
+    @limiter.limit(VERIFY_LIMIT)
+    async def verify(request: Request):
+        try:
+            body = await request.json()
+            task_id = body["taskId"]
+            if not isinstance(task_id, int) or isinstance(task_id, bool) or task_id < 1:
+                raise ValueError
+        except Exception:
+            return JSONResponse({"error": 'Send {"taskId": <positive integer>}'}, status_code=400)
+        services.reader.wake()
+        row = await run_in_threadpool(current_job, services.storage, task_id)
+        return {"jobKey": row["job_key"] if row else None, "state": row["state"] if row else None}
+
+    @app.get("/tasks/{task_id}/attempts")  # V-12
+    def attempts(task_id: int):
+        reports = [build_report(services.storage, s.deployment_id, task_id, n) for n in attempts_of_task(services.storage, task_id)]
+        return [r for r in reports if r is not None]
+
+    @app.get("/tasks/{task_id}/attempts/{n}")  # V-13
+    def attempt(task_id: int, n: int):
+        report = build_report(services.storage, s.deployment_id, task_id, n)
+        if report is None:
+            return JSONResponse({"error": "Not found"}, status_code=404)
+        return report
+
     return app
 
 
@@ -168,7 +222,7 @@ def main() -> int:
     from .chain import Chain
 
     try:
-        services = prepare(settings, Chain(settings.rpc_url, settings.escrow_address))
+        services = prepare(settings, Chain(settings.rpc_url, settings.escrow_address, can_sign=settings.live))
     except (StartupError, DataFolderError, SignerLockError, ConfigError) as exc:
         print(f"Startup stopped: {exc}", file=sys.stderr)
         return 2
