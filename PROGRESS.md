@@ -6,7 +6,7 @@
 | M0 | Setup and external checks | 1 (4 Oct) | DONE | 2026-10-04 |
 | M1 | Contract part 1 + disposable deploy | 1 (4 Oct) | DONE | 2026-10-04 |
 | M2 | Contract complete | 2 (5 Oct) | DONE | 2026-10-04 |
-| M3 | Verifier part 1 | 3 (6 Oct) | IN PROGRESS (code and tests done; owner live /health check open) | |
+| M3 | Verifier part 1 | 3 (6 Oct) | DONE | 2026-10-04 |
 | M4 | Verifier part 2 | 4 (7 Oct) | TODO | |
 | M5 | Frontend part 1 + calibration | 5 (8 Oct) | TODO | |
 | M6 | Frontend part 2 | 6 (9 Oct) | TODO | |
@@ -94,6 +94,10 @@
 - (2026-10-04) M3: measured event reader speed on testnet: one batch = `eth_getLogs` (about 0.7 s) + `eth_getBlock` (about 0.16 s). The first full scan of 24,086 blocks took about 215 s (about 112 blocks/s).
 - (2026-10-04) M3 smoke run (readonly, scratch data folder, values not from verifier/.env passed as environment variables): startup OK, history rebuild from START_BLOCK complete at block 68163738, then /health: V-R1..V-R8 and V-R10 pass, V-R9 fails only for the worker loop (M4). Upload of a fixture returned its exact SHA-256; /files served the preview; an animated PNG gave 400.
 
+- (2026-10-04) M3 live check (owner, own terminal, verifier/.env, VERIFIER_MODE=live, DATA_ROOT ../verifier-data): `scripts/setup_env.py --signer-from-keystore verifier` wrote the key for 0xf5310f26c9410C8cbe69f9ceDD109D709F18282c (matches contract verifier()). History rebuild complete at block 68165654 in about 4 minutes. /health: historyStatus complete; failed only V-R9 (eventReader OK, workerLoop not running, M4); V-R3 signer matches; V-R4 balance 1.0000 MON; V-R7 5 blocks behind safe head. M3 "Done when" items all true. Tests at M3 end: pytest 183 passed, forge test 67 passed.
+- (2026-10-04) M3: the manual second-copy lock check (V-07) was NOT reported by the owner (the message had the template text). The automated test `test_VT17_lock_blocks_another_process` (a second process cannot take signer.lock) passes. Next action: owner reports the manual result when convenient; V-T17 is complete in M4.
+- (2026-10-04) Owner: rebuild speed, option (b): parallel getLogs block-range requests, capped well below the RPC limit of 50 requests per second, with retries. Batches are still saved in chain order, each with its checkpoint in one transaction (V-E2). Do it before M8.
+- (2026-10-04) Owner: MPO photos are handled at M6 as proposed (test the owner's phone; IF MPO, the frontend converts to JPEG before upload, F-13).
 ## Open problems
 - (2026-10-04) Cutoff time came from other teams, not from the dashboard (see External checks). Next action: the owner confirms it on the hackathon dashboard before M9.
 - (2026-10-04) Privy is not set up. Next action: the owner makes the Privy app, turns on email login and gives the App ID before M5.
@@ -101,5 +105,5 @@
 - (2026-10-04) Model lifetime: the verifier must work through judging (ADMISSION_UNTIL 2026-11-15). gemini-3-flash-preview is a preview model, and the Gemini models page seemed to list it as both "Preview" and "Shut down". The default gemma-4-26b-a4b-it status was not checked. Next action: before M8, the owner checks in AI Studio that the chosen model has no announced shutdown before 2026-11-15. A model change is an .env-only change.
 - (2026-10-04) RESOLVED at M3: V-E2 batch size is 100 (owner decision, see Decisions).
 - (2026-10-04) RESOLVED at M3: the verifier wallet has 1.0 MON (owner).
-- (2026-10-04) Rebuild time grows with the chain. A full rebuild (V-E5) or restore check (V-B2) scans from START_BLOCK at about 112 blocks/s with the 100-block getLogs limit. Monad testnet makes about 2.5 to 3.3 blocks/s (216,000 to 285,000 blocks per day), so each day of chain history adds about 32 to 42 minutes of rebuild time. Estimate: by M8 (7 days) about 4 to 5 hours; by 15 Nov (42 days) about 22 to 30 hours. Normal operation is not affected (the reader keeps up easily). Next action, before M8: the owner chooses (a) a second public Monad testnet RPC with a larger getLogs range, used only for rebuilds (needs the Monad docs RPC list; no account, no cost), (b) parallel getLogs calls within the 50 rps limit, or (c) accept long rebuilds and keep the data folder safe.
-- (2026-10-04) Some phone cameras save multi-picture JPEG (Pillow format "MPO"). V-L3/V-L4 reject it (more than one frame). Next action: test the owner's phone camera at M6; IF it gives MPO, the frontend converts to JPEG before upload (F-13).
+- (2026-10-04) DECIDED (option b, see Decisions), work open before M8: Rebuild time grows with the chain. A full rebuild (V-E5) or restore check (V-B2) scans from START_BLOCK at about 112 blocks/s with the 100-block getLogs limit. Monad testnet makes about 2.5 to 3.3 blocks/s (216,000 to 285,000 blocks per day), so each day of chain history adds about 32 to 42 minutes of rebuild time. Estimate: by M8 (7 days) about 4 to 5 hours; by 15 Nov (42 days) about 22 to 30 hours. Normal operation is not affected (the reader keeps up easily). Next action, before M8: the owner chooses (a) a second public Monad testnet RPC with a larger getLogs range, used only for rebuilds (needs the Monad docs RPC list; no account, no cost), (b) parallel getLogs calls within the 50 rps limit, or (c) accept long rebuilds and keep the data folder safe.
+- (2026-10-04) DECIDED (handle at M6, see Decisions): Some phone cameras save multi-picture JPEG (Pillow format "MPO"). V-L3/V-L4 reject it (more than one frame). Next action: test the owner's phone camera at M6; IF it gives MPO, the frontend converts to JPEG before upload (F-13).
