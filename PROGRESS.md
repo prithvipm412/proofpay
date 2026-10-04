@@ -4,7 +4,7 @@
 | ID | Goal | Day | Status | Date done |
 | --- | --- | --- | --- | --- |
 | M0 | Setup and external checks | 1 (4 Oct) | DONE | 2026-10-04 |
-| M1 | Contract part 1 + disposable deploy | 1 (4 Oct) | IN PROGRESS | |
+| M1 | Contract part 1 + disposable deploy | 1 (4 Oct) | DONE | 2026-10-04 |
 | M2 | Contract complete | 2 (5 Oct) | TODO | |
 | M3 | Verifier part 1 | 3 (6 Oct) | TODO | |
 | M4 | Verifier part 2 | 4 (7 Oct) | TODO | |
@@ -33,10 +33,12 @@
 ## Deployments
 | Date | Deployment ID | START_BLOCK | Settings | Deploy tx | Verified | Note |
 | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-04 | 10143:0x3b639d7795e2788616cd45e162770ae4417dc20c | 68125425 | disputeWindow 60, reviewGrace 300, arbitrationTimeout 3600; owner/arbiter (deployer) 0xEdBF2B042727422B5891a5ca5B8c1aB41d176c64; verifier 0xf5310f26c9410C8cbe69f9ceDD109D709F18282c; M1 code (C-01..C-15, C-23) | 0x10e76fd5e76981ebbd6c12da3788312685579861141694c28e305b83ddda07d5 | no | **DISPOSABLE** (M1). Do not put MON in tasks on it. |
 
 ## Important transactions
 | Date | What | Tx hash |
 | --- | --- | --- |
+| 2026-10-04 | M1 disposable deploy of ProofPayEscrow (status 1, block 68125425, 2,498,205 gas x 102 gwei = 0.25481691 MON). https://testnet.monadscan.com/tx/0x10e76fd5e76981ebbd6c12da3788312685579861141694c28e305b83ddda07d5 | 0x10e76fd5e76981ebbd6c12da3788312685579861141694c28e305b83ddda07d5 |
 
 ## Decisions
 - (2026-10-04) Owner: budget is zero. Do not use any paid service. (Replaces the paid-host examples in section 12 M0 task 5.)
@@ -60,7 +62,7 @@
 - (2026-10-04) M1: Deploy uses the template flow (9.7.1): `yarn deploy --network monad_testnet --keystore deployer` runs `script/Deploy.s.sol`, which runs `script/DeployProofPayEscrow.s.sol`. The script reads VERIFIER_ADDRESS, DISPUTE_WINDOW, REVIEW_GRACE, ARBITRATION_TIMEOUT from the shell and reverts on any chain other than 10143 and 31337 (section 4, no mainnet).
 - (2026-10-04) M1: Template issues found. (1) `scripts-js/parseArgs.js` reads LOCALHOST_KEYSTORE_ACCOUNT, but the template `.env.example` sets ETH_KEYSTORE_ACCOUNT, so a plain local `yarn deploy` fails; use `yarn deploy --keystore scaffold-eth-default` on anvil. (2) The template `script/VerifyAll.s.sol` fails `forge fmt --check`; not changed.
 - (2026-10-04) M1: Local rehearsal on anvil (chain 31337, public anvil test account #9 imported as keystore `scaffold-eth-default`, as `yarn chain` does): deploy and ABI export work; on-chain reads matched the settings (verifier, 60/300/3600, taskCount 0). Local records deleted after the test.
-- (2026-10-04) M1 deploy failure and fix. Attempt 1 (deployer 0 MON): -32003 "Insufficient funds for gas * price + value" (correct). Attempt 2 (deployer 5 MON, simulation OK, 0.288 MON needed): -32000 "Signer had insufficient balance" after 4 tries; nonce stayed 0. Findings: balance 5 MON on latest/safe/finalized and on 3 RPCs; no delegation code; both attempts had nonce 0, gas 2,824,058 (forge default 130% of the RPC estimate 2,172,353) and gas price 102 gwei (base fee is at the 100 gwei minimum), so the signed transaction was byte-identical. Monad locks gas_limit x price before execution (docs gas-pricing: "The gas charged for a transaction is the gas limit"). A public report (github.com/AgentHiv/Panal/pull/225) says a retry with the same nonce and fees "signs a byte-identical transaction, and the node repeats its cached rejection without looking at the balance again". Probable cause: cached rejection of the 0-MON attempt. Fix: deploy with `--gas-estimate-multiplier 115` (2,498,205 gas, max 0.255 MON): a different transaction, and less MON locked. `yarn deploy` cannot pass this flag, so the owner runs the Makefile's forge command directly with `--account deployer --broadcast` (allowed by 9.7.1), then `node scripts-js/generateTsAbis.js`.
+- (2026-10-04) M1 deploy failure and fix. Attempt 1 (deployer 0 MON): -32003 "Insufficient funds for gas * price + value" (correct). Attempt 2 (deployer 5 MON, simulation OK, 0.288 MON needed): -32000 "Signer had insufficient balance" after 4 tries; nonce stayed 0. Findings: balance 5 MON on latest/safe/finalized and on 3 RPCs; no delegation code; both attempts had nonce 0, gas 2,824,058 (forge default 130% of the RPC estimate 2,172,353) and gas price 102 gwei (base fee is at the 100 gwei minimum), so the signed transaction was byte-identical. Monad locks gas_limit x price before execution (docs gas-pricing: "The gas charged for a transaction is the gas limit"). A public report (github.com/AgentHiv/Panal/pull/225) says a retry with the same nonce and fees "signs a byte-identical transaction, and the node repeats its cached rejection without looking at the balance again". Probable cause: cached rejection of the 0-MON attempt. Result: the retry with the fix succeeded at once (tx 0x10e76fd5e76981ebbd6c12da3788312685579861141694c28e305b83ddda07d5), which supports the cached-rejection cause. The receipt shows gasUsed = gas limit (2,498,205), as Monad charges the full limit. Fix: deploy with `--gas-estimate-multiplier 115` (2,498,205 gas, max 0.255 MON): a different transaction, and less MON locked. `yarn deploy` cannot pass this flag, so the owner runs the Makefile's forge command directly with `--account deployer --broadcast` (allowed by 9.7.1), then `node scripts-js/generateTsAbis.js`.
 - (2026-10-04) M1: `_pay` (C-07) is written in M1 but no M1 function pays. Its tests (C-T8, C-T9) come in M2 with release/refund. `TooManyAttempts` (C-15) cannot be reached until recordVerdict exists (M2, C-T3).
 - (2026-10-04) Owner instruction: start a fresh git history. The first commit is an orphan commit that holds the template snapshot at 14fa9c893ef747df2446cc3f2c08b55a58f867c0 plus the M0 changes. The template is kept as the remote `upstream`. Credit is in README.md. No published history was rewritten: the project repo starts with this commit.
 - (2026-10-04) Template bug: `scaffold.config.ts` used `chains.monad_testnet`, which viem 2.31.1 does not export (it exports `monadTestnet`). The page gave HTTP 500. Changed to `chains.monadTestnet`. M5 replaces this with our own `defineChain` (F-03).
