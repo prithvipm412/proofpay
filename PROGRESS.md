@@ -7,7 +7,7 @@
 | M1 | Contract part 1 + disposable deploy | 1 (4 Oct) | DONE | 2026-10-04 |
 | M2 | Contract complete | 2 (5 Oct) | DONE | 2026-10-04 |
 | M3 | Verifier part 1 | 3 (6 Oct) | DONE | 2026-10-04 |
-| M4 | Verifier part 2 | 4 (7 Oct) | TODO | |
+| M4 | Verifier part 2 | 4 (7 Oct) | IN PROGRESS | |
 | M5 | Frontend part 1 + calibration | 5 (8 Oct) | TODO | |
 | M6 | Frontend part 2 | 6 (9 Oct) | TODO | |
 | M7 | Trust features + recovery | 7 (10 Oct) | TODO | |
@@ -28,7 +28,7 @@
 - Template commit: 14fa9c893ef747df2446cc3f2c08b55a58f867c0 (monad-developers/scaffold-monad-foundry, branch main)
 - Foundry / Node / Next.js / Python: forge/anvil/cast 1.7.1-monad-v1.0.0 (bb49277) / Node v20.20.2, Yarn 3.2.3 / Next.js 15.2.5 (wagmi 2.15.6, viem 2.31.1, RainbowKit 2.2.7) / Python 3.11.15 via uv 0.12.23
 - Submodules: forge-std 77041d2, openzeppelin-contracts e4f7021, solidity-bytes-utils f4413cd
-- Verifier pins so far: openai==3.24.0, pillow==12.3.0
+- Verifier pins: see verifier/requirements.txt (no new pins in M4; slowapi 0.1.10 and limits 5.8.0 were already pinned at M3)
 
 ## Deployments
 | Date | Deployment ID | START_BLOCK | Settings | Deploy tx | Verified | Note |
@@ -97,6 +97,20 @@
 - (2026-10-04) M3: the manual second-copy lock check (V-07) was NOT reported by the owner (the message had the template text). The automated test `test_VT17_lock_blocks_another_process` (a second process cannot take signer.lock) passes. Next action: owner reports the manual result when convenient; V-T17 is complete in M4.
 - (2026-10-04) Owner: rebuild speed, option (b): parallel getLogs block-range requests, capped well below the RPC limit of 50 requests per second, with retries. Batches are still saved in chain order, each with its checkpoint in one transaction (V-E2). Do it before M8.
 - (2026-10-04) Owner: MPO photos are handled at M6 as proposed (test the owner's phone; IF MPO, the frontend converts to JPEG before upload, F-13).
+- (2026-10-04) M4 (V-J `signed` row): Monad docs (reference/json-rpc/overview): the `pending` block tag "behaves the same as 'latest'". The pending-vs-latest nonce check is kept as written, but it cannot see a transaction in flight. The protection is the serial gate (V-J1) and V-J3 step 3. The reconciler reads the latest nonce BEFORE it looks for receipts, so our own transaction that is mined between the two reads is never taken for a foreign one.
+- (2026-10-04) M4 (V-J3 step 1): Monad `latest` is the Proposed state, and "Transaction receipts from non-finalized blocks can change" (same page). The reconciler acts on a receipt only when its block is at or below the `finalized` block and the finalized block hash at that number matches. A receipt that exists but is not final means "wait" (never `blocked_nonce`).
+- (2026-10-04) M4 (verdict transactions): EIP-1559 type 2 (Monad docs gas-pricing: "Monad supports EIP-1559"; price = min(base + priority, max)). maxPriorityFeePerGas = `eth_maxPriorityFeePerGas` (measured 2 gwei), maxFeePerGas = 2 x base fee + priority (base fee measured 100 gwei, the minimum), gas limit = estimate x 1.25 (Monad charges the limit; an out-of-gas revert would end the job as `reverted`).
+- (2026-10-04) M4 (V-A1, V-S4): admission needs the poster and the worker, but ProofSubmitted has neither. The event reader now also reads `TaskAccepted` and keeps a `parties` table (task_id, poster, worker), filled from TaskCreated and TaskAccepted inside the same batch transaction and cleared on rebuild (V-E5). Schema version 2: a data folder with version 1 is rebuilt once at its next start (the owner's folder: one rebuild of about 5 minutes). Unknown parties give `not_admitted` (reason `unknown_parties`, fail closed).
+- (2026-10-04) M4 (V-A2): daily counters use the UTC day of the verifier clock at admission (jobs) or at the call/signing (model calls, verdict transactions). Counter keys: `jobs`, `jobs_poster:<addr>`, `jobs_worker:<addr>`, `model_calls`, `verdict_tx`.
+- (2026-10-04) M4 (V-J7, V-A5): a job starts only IF a full round (2 calls, V-M5) fits in today's model budget AND a verdict transaction fits in today's cap. Otherwise eligible jobs wait in their state; V-J2 expiry still applies. Every call that is sent is counted (V-M7), including the V-J6 test call.
+- (2026-10-04) M4 (`awaiting_files` row vs V-J2): "continue without them at reviewBy - 150 s" collides with the V-J2 expiry at remaining < 150 s. Rule chosen: a job with a missing file continues to evaluation (V-C1 then fails, fail verdict) when remaining <= 180 s, which is two 15 s polls before the expiry line.
+- (2026-10-04) M4 (V-J5): an unexpected error during evaluation (for example a model-input decode error) counts as a failed round. It goes to `model_retry`, and after 3 rounds to `model_failed`. It is never a verdict.
+- (2026-10-04) M4 (V-06): in `readonly` mode the worker loop only writes its heartbeat (V-R9). It does not evaluate, call the model or sign, so a restored copy (V-B2) spends no model budget. Signing and broadcast also raise `ReadonlyError` in `Chain` unless it was made with `can_sign=True` (live mode only).
+- (2026-10-04) M4 (V-R9, V-02): the worker runs long bounded calls (model up to 2 x 45 s, decoding in a child) in a helper thread and refreshes its heartbeat every 5 s while it waits, so a model call does not make `ready` false. Before signing, the worker refreshes readiness (all V-R items) and signs only IF `ready` is true. It also starts no new job while a job is in `blocked_nonce`.
+- (2026-10-04) M4 (V-A6): rate limits are kept per client IP in memory (slowapi). uvicorn uses `X-Forwarded-For` only from 127.0.0.1 (its default `forwarded_allow_ips`), which is where the ngrok agent connects from at M8.
+- (2026-10-04) M4 (V-22): the V-C7 `detail` in the report has the confidence and the model's own reason sentence (untrusted text, report only, never on chain). The chain reason is always one of the V-21 texts.
+- (2026-10-04) M4 (V-22 settlement.state): `not_sent` before signing; then the job state (`signed`, `broadcast`, `confirmed`, `reverted`, `blocked_nonce`, or `expired` after a broadcast); `none` when no local job exists (for example after a restore).
+- (2026-10-04) M4: README items for M8 from this milestone: one verdict at a time (V-J1), automatic retries reuse the submitted attempt (V-J8), admission mode and caps (V-A7), duplicate policy (V-C10), `blocked_nonce` recovery.
 
 ## Open problems
 - (2026-10-04) Cutoff time came from other teams, not from the dashboard (see External checks). Next action: the owner confirms it on the hackathon dashboard before M9.
