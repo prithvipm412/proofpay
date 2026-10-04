@@ -187,14 +187,17 @@ class EventReader:
 
     def run(self) -> None:
         while not self._stop.is_set():
+            more = False
             try:
-                self.scan_once()
+                more = self.scan_once() >= MAX_BATCHES_PER_SCAN  # behind: continue without a pause
                 self.last_error = None
                 self._maybe_cleanup()
             except Exception as exc:  # RPC or database problem: log, keep the loop alive
                 self.last_error = f"{type(exc).__name__}: {str(exc)[:200]}"
                 log.warning("Event scan failed: %s", self.last_error)
             self.heartbeat = time.monotonic()
+            if more:
+                continue
             self._wake.wait(SCAN_INTERVAL_S)
             self._wake.clear()
 

@@ -327,3 +327,24 @@ def test_chain_decodes_real_abi_logs(monkeypatch):
     assert verdict.args["pass"] is True and verdict.args["score"] == 86 and verdict.args["reason"] == "AI check: ok"
     assert verdict.tx_hash == "0x" + "ef" * 32
     assert verdict.event_id == "000000000050:000001:000004"
+
+
+def test_run_loop_catches_up_without_pause_and_stops(reader, chain, storage):
+    import threading
+    import time
+
+    chain.mine(6000)  # 60 batches: more than one scan (MAX_BATCHES_PER_SCAN = 50)
+    chain.create_task(1, H1)
+    t = threading.Thread(target=reader.run, daemon=True)
+    started = time.monotonic()
+    t.start()
+    while storage.meta()["historyStatus"] != "complete" and time.monotonic() - started < 10:
+        time.sleep(0.05)
+    elapsed = time.monotonic() - started
+    reader.stop()
+    t.join(timeout=5)
+    assert not t.is_alive()
+    assert storage.meta()["historyStatus"] == "complete"
+    assert elapsed < 2.5  # no 3 s pause between the two scans
+    assert (1, 0, "before") in claims(storage)
+    assert reader.heartbeat is not None
