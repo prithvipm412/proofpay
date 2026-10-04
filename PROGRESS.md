@@ -5,7 +5,7 @@
 | --- | --- | --- | --- | --- |
 | M0 | Setup and external checks | 1 (4 Oct) | DONE | 2026-10-04 |
 | M1 | Contract part 1 + disposable deploy | 1 (4 Oct) | DONE | 2026-10-04 |
-| M2 | Contract complete | 2 (5 Oct) | TODO | |
+| M2 | Contract complete | 2 (5 Oct) | DONE | 2026-10-04 |
 | M3 | Verifier part 1 | 3 (6 Oct) | TODO | |
 | M4 | Verifier part 2 | 4 (7 Oct) | TODO | |
 | M5 | Frontend part 1 + calibration | 5 (8 Oct) | TODO | |
@@ -34,11 +34,13 @@
 | Date | Deployment ID | START_BLOCK | Settings | Deploy tx | Verified | Note |
 | --- | --- | --- | --- | --- | --- | --- |
 | 2026-10-04 | 10143:0x3b639d7795e2788616cd45e162770ae4417dc20c | 68125425 | disputeWindow 60, reviewGrace 300, arbitrationTimeout 3600; owner/arbiter (deployer) 0xEdBF2B042727422B5891a5ca5B8c1aB41d176c64; verifier 0xf5310f26c9410C8cbe69f9ceDD109D709F18282c; M1 code (C-01..C-15, C-23) | 0x10e76fd5e76981ebbd6c12da3788312685579861141694c28e305b83ddda07d5 | no | **DISPOSABLE** (M1). Do not put MON in tasks on it. |
+| 2026-10-04 | 10143:0x0f8ae1306c78fcf7bf998f8b8ee88add1bd7a0cf | 68139652 | disputeWindow 60, reviewGrace 300, arbitrationTimeout 3600 (demo settings); owner/arbiter (deployer) 0xEdBF2B042727422B5891a5ca5B8c1aB41d176c64; verifier 0xf5310f26c9410C8cbe69f9ceDD109D709F18282c; M2 code (all of section 9), commit 7301716 | 0x834bf741a82826557960a08e85eec7952ac07c4f2d3951a2fdbe12965a56d21d | yes, Sourcify exact_match (MonadVision) | **FINAL** (M2). Block hash 0x0090a989c8f987a520012ac45596405c5ec9639b5c014b67a82b593e9a287200. https://testnet.monadvision.com/address/0x0F8AE1306C78fcF7bF998f8b8eE88ADD1Bd7A0cF |
 
 ## Important transactions
 | Date | What | Tx hash |
 | --- | --- | --- |
 | 2026-10-04 | M1 disposable deploy of ProofPayEscrow (status 1, block 68125425, 2,498,205 gas x 102 gwei = 0.25481691 MON). https://testnet.monadscan.com/tx/0x10e76fd5e76981ebbd6c12da3788312685579861141694c28e305b83ddda07d5 | 0x10e76fd5e76981ebbd6c12da3788312685579861141694c28e305b83ddda07d5 |
+| 2026-10-04 | M2 final deploy of ProofPayEscrow (status 1, block 68139652, 3,962,855 gas x 102 gwei = 0.40421121 MON). https://testnet.monadscan.com/tx/0x834bf741a82826557960a08e85eec7952ac07c4f2d3951a2fdbe12965a56d21d | 0x834bf741a82826557960a08e85eec7952ac07c4f2d3951a2fdbe12965a56d21d |
 
 ## Decisions
 - (2026-10-04) Owner: budget is zero. Do not use any paid service. (Replaces the paid-host examples in section 12 M0 task 5.)
@@ -75,6 +77,10 @@
 - (2026-10-04) M2 (C-T14): invariant runs 128 x depth 150 with fail-on-revert on (about 7 s). The handler acts on up to 30 tasks, uses the caller that each function expects, and has a RejectingReceiver actor so that `withdrawable` is used. Mutation checks: removing the deferred credit in `_pay`, and an `expireDispute` that pays without a status change, both break the invariant.
 - (2026-10-04) M2 (9.7.3): verification uses Sourcify on MonadVision (`--verifier sourcify --verifier-url https://sourcify-api-monad.blockvision.org/`, Monad docs guides/verify-smart-contract/foundry). It needs no API key (zero budget). `foundry.toml` sets `use_literal_content = true` from the same page. The page also lists `metadata` and `metadata_hash = "none"`, but forge 1.7.1 reports them as unknown keys, so they are not set (forge default `bytecode_hash = "ipfs"` stays). The page asks for Foundry v1.8 or later; we have 1.7.1-monad, which has all the flags used.
 - (2026-10-04) M2: deploy simulation on testnet (no broadcast): 3,962,855 gas limit at 102 gwei = 0.404 MON with `--gas-estimate-multiplier 115`. Runtime size 15,263 bytes.
+- (2026-10-04) M2 final deploy (owner ran it): `forge script script/Deploy.s.sol --rpc-url monad_testnet --account deployer --broadcast --legacy --ffi --gas-estimate-multiplier 115`, with VERIFIER_ADDRESS, DISPUTE_WINDOW=60, REVIEW_GRACE=300, ARBITRATION_TIMEOUT=3600 exported in the shell. Checks by the agent: receipt status 1 on chain 10143; on-chain reads owner = deployer, pendingOwner = 0, verifier = verifier wallet, taskCount 0, 60/300/3600, MAX_ATTEMPTS 3, MIN_AMOUNT 0.001 MON; deployed runtime code equals the local build of commit 7301716 byte for byte after masking the 7 immutable slots (metadata hash included).
+- (2026-10-04) M2 verification (9.7.3): `ETHERSCAN_API_KEY= BASESCAN_API_KEY= forge verify-contract 0x0f8ae1306c78fcf7bf998f8b8ee88add1bd7a0cf contracts/ProofPayEscrow.sol:ProofPayEscrow --chain 10143 --verifier sourcify --verifier-url https://sourcify-api-monad.blockvision.org/ --constructor-args $(cast abi-encode "constructor(address,uint64,uint64,uint64)" <verifier> 60 300 3600) --watch`. Result `exact_match` (runtime); Sourcify API /v2/contract/10143/<address> confirms. Template quirks: forge loads the template `packages/foundry/.env` (git-ignored) which sets ETHERSCAN_API_KEY, and then uses Etherscan even with `--verifier sourcify`; the template `foundry.toml` `[etherscan] monad_testnet` entry needs BASESCAN_API_KEY. Blanking both for the command fixes it. Files not changed.
+- (2026-10-04) M2: in the agent's shell, `cast call` fails with "Device not configured (os error 6)" (other cast commands work). The agent reads the contract with raw `eth_call` instead. The owner's terminal is not affected as far as known.
+- (2026-10-04) M2 (9.7.6): frontend ABI regenerated (`node scripts-js/generateTsAbis.js`; `packages/nextjs/contracts/deployedContracts.ts` now has the M2 ABI at the final address). The verifier has no contract code yet; M3 loads the ABI from `packages/foundry/out/` and its data folder comes from the deployment ID (V-R5). `verifier/.env` CHAIN_ID, ESCROW_ADDRESS and START_BLOCK are still empty; the owner sets them at M3 (10143, the final address, 68139652).
 
 ## Open problems
 - (2026-10-04) Cutoff time came from other teams, not from the dashboard (see External checks). Next action: the owner confirms it on the hackathon dashboard before M9.
