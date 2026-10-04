@@ -8,7 +8,6 @@ import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.s
 /// @title ProofPayEscrow
 /// @notice Centralized escrow with automated visual checks and duplicate-evidence detection.
 /// The verifier key and the arbiter (the contract owner) are trusted parties. This is a hackathon trust assumption.
-/// @dev M1 scope: C-01 to C-15 and C-23. Verdicts, disputes, payouts and withdrawals come in M2.
 contract ProofPayEscrow is Ownable2Step, ReentrancyGuard {
     // ---------------------------------------------------------------- types (9.2)
 
@@ -67,19 +66,28 @@ contract ProofPayEscrow is Ownable2Step, ReentrancyGuard {
     uint64 public immutable reviewGrace;
     uint64 public immutable arbitrationTimeout;
 
-    // ---------------------------------------------------------------- events (C-24, M1 subset)
+    // ---------------------------------------------------------------- events (C-24)
 
     event TaskCreated(
         uint256 indexed id, address indexed poster, uint256 amount, bytes32 beforeHash, uint64 submitBy, uint64 reviewBy
     );
     event TaskAccepted(uint256 indexed id, address indexed worker);
     event ProofSubmitted(uint256 indexed id, uint8 attempt, bytes32 proofHash);
+    event VerdictRecorded(uint256 indexed id, uint8 attempt, bytes32 proofHash, bool pass, uint8 score, string reason);
+    event Disputed(uint256 indexed id);
+    event DisputeResolved(uint256 indexed id, bool payWorker);
+    event DisputeExpired(uint256 indexed id);
+    event Released(uint256 indexed id, address indexed worker, uint256 amount);
+    event Refunded(uint256 indexed id, address indexed poster, uint256 amount);
     event PaymentDeferred(address indexed to, uint256 amount);
+    event Withdrawn(address indexed from, address indexed to, uint256 amount);
     event VerifierChanged(address indexed oldVerifier, address indexed newVerifier);
 
-    // ---------------------------------------------------------------- errors (C-25, M1 subset)
+    // ---------------------------------------------------------------- errors (C-25)
 
+    error NotPoster();
     error NotWorker();
+    error NotVerifier();
     error PosterCannotAccept();
     error WrongStatus(Status expected, Status actual);
     error AmountTooLow();
@@ -87,10 +95,20 @@ contract ProofPayEscrow is Ownable2Step, ReentrancyGuard {
     error SameAsBefore();
     error InvalidDeadline();
     error SubmitClosed();
+    error ReviewClosed();
+    error RefundNotAvailable();
     error TooManyAttempts();
+    error StaleVerdict();
+    error DisputeWindowOpen();
+    error DisputeWindowClosed();
+    error ArbitrationNotExpired();
+    error ArbitrationClosed();
+    error ScoreTooHigh();
     error TextTooLong();
     error EmptyText();
     error TaskNotFound();
+    error NothingToWithdraw();
+    error TransferFailed();
     error ZeroAddress();
     error InvalidConfig();
     error RenounceDisabled();
@@ -197,6 +215,106 @@ contract ProofPayEscrow is Ownable2Step, ReentrancyGuard {
         emit ProofSubmitted(id, attempt, proofHash);
     }
 
+    /// @dev C-16. `attempt` and `proofHash` bind the verdict to one submission, so an old verdict cannot
+    /// change a newer attempt (StaleVerdict).
+    function recordVerdict(uint256 id, uint8 attempt, bytes32 proofHash, bool pass, uint8 score, string calldata reason)
+        external
+        taskExists(id)
+    {
+        Task storage t = tasks[id];
+        if (msg.sender != verifier) revert NotVerifier();
+        if (t.status != Status.Submitted) revert WrongStatus(Status.Submitted, t.status);
+        if (attempt != t.attempts || proofHash != t.proofHash) revert StaleVerdict();
+        if (block.timestamp >= t.reviewBy) revert ReviewClosed();
+        if (score > 100) revert ScoreTooHigh();
+        if (bytes(reason).length > MAX_REASON) revert TextTooLong();
+
+        t.score = score;
+        if (pass) {
+            t.status = Status.Approved;
+            t.disputeUntil = uint64(block.timestamp) + disputeWindow;
+        } else {
+            t.status = Status.Accepted;
+        }
+        emit VerdictRecorded(id, attempt, proofHash, pass, score, reason);
+    }
+
+    /// @dev C-17
+    function dispute(uint256 id) external taskExists(id) {
+        Task storage t = tasks[id];
+        if (msg.sender != t.poster) revert NotPoster();
+        if (t.status != Status.Approved) revert WrongStatus(Status.Approved, t.status);
+        if (block.timestamp >= t.disputeUntil) revert DisputeWindowClosed();
+
+        t.status = Status.Disputed;
+        emit Disputed(id);
+    }
+
+    /// @dev C-18. The arbiter can decide only before `disputeUntil + arbitrationTimeout`.
+    /// At or after that time only `expireDispute` works, so the two never overlap.
+    function resolveDispute(uint256 id, bool payWorker) external onlyOwner nonReentrant taskExists(id) {
+        Task storage t = tasks[id];
+        if (t.status != Status.Disputed) revert WrongStatus(Status.Disputed, t.status);
+        if (block.timestamp >= uint256(t.disputeUntil) + arbitrationTimeout) revert ArbitrationClosed();
+
+        emit DisputeResolved(id, payWorker);
+        if (payWorker) {
+            _release(id, t);
+        } else {
+            _refund(id, t);
+        }
+    }
+
+    /// @dev C-19. Favors the poster when the arbiter is absent (known risk, see README).
+    function expireDispute(uint256 id) external nonReentrant taskExists(id) {
+        Task storage t = tasks[id];
+        if (t.status != Status.Disputed) revert WrongStatus(Status.Disputed, t.status);
+        if (block.timestamp < uint256(t.disputeUntil) + arbitrationTimeout) revert ArbitrationNotExpired();
+
+        emit DisputeExpired(id);
+        _refund(id, t);
+    }
+
+    /// @dev C-20
+    function release(uint256 id) external nonReentrant taskExists(id) {
+        Task storage t = tasks[id];
+        if (t.status != Status.Approved) revert WrongStatus(Status.Approved, t.status);
+        if (block.timestamp < t.disputeUntil) revert DisputeWindowOpen();
+
+        _release(id, t);
+    }
+
+    /// @dev C-21. A Submitted task has a review period until `reviewBy`.
+    /// Any status other than Open, Accepted or Submitted also reverts with RefundNotAvailable.
+    function refund(uint256 id) external nonReentrant taskExists(id) {
+        Task storage t = tasks[id];
+        if (msg.sender != t.poster) revert NotPoster();
+        Status s = t.status;
+        bool allowed;
+        if (s == Status.Open) {
+            allowed = true;
+        } else if (s == Status.Accepted) {
+            allowed = block.timestamp >= t.submitBy || t.attempts == MAX_ATTEMPTS;
+        } else if (s == Status.Submitted) {
+            allowed = block.timestamp >= t.reviewBy;
+        }
+        if (!allowed) revert RefundNotAvailable();
+
+        _refund(id, t);
+    }
+
+    /// @dev C-22. Only the entitled account (msg.sender) can withdraw; it can send to a different address.
+    function withdraw(address payable to) external nonReentrant {
+        uint256 amount = withdrawable[msg.sender];
+        if (amount == 0) revert NothingToWithdraw();
+        if (to == address(0)) revert ZeroAddress();
+
+        withdrawable[msg.sender] = 0;
+        (bool ok,) = to.call{ value: amount }("");
+        if (!ok) revert TransferFailed();
+        emit Withdrawn(msg.sender, to, amount);
+    }
+
     // ---------------------------------------------------------------- views
 
     /// @dev C-23
@@ -206,7 +324,21 @@ contract ProofPayEscrow is Ownable2Step, ReentrancyGuard {
 
     // ---------------------------------------------------------------- payments
 
-    /// @dev C-07. Used by the M2 payout functions. A failed send credits `withdrawable` and never reverts.
+    /// @dev Status change before payment (C-06). `amount` is never set to zero.
+    function _release(uint256 id, Task storage t) private {
+        t.status = Status.Paid;
+        emit Released(id, t.worker, t.amount);
+        _pay(t.worker, t.amount);
+    }
+
+    /// @dev Status change before payment (C-06). `amount` is never set to zero.
+    function _refund(uint256 id, Task storage t) private {
+        t.status = Status.Refunded;
+        emit Refunded(id, t.poster, t.amount);
+        _pay(t.poster, t.amount);
+    }
+
+    /// @dev C-07. A failed send credits `withdrawable` and never reverts.
     function _pay(address to, uint256 amount) internal {
         (bool ok,) = payable(to).call{ value: amount, gas: 50_000 }("");
         if (!ok) {
