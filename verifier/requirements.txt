@@ -1,3 +1,20 @@
-# Pinned verifier dependencies (Python 3.11). More are added in M3/M4.
+# Pinned verifier dependencies (Python 3.11). Install with:
+#   uv pip install --python .venv/bin/python -r requirements.txt
 openai==3.24.0
 pillow==12.3.0
+fastapi==0.142.2
+starlette==1.7.0
+uvicorn[standard]==0.54.0
+python-multipart==0.0.32
+pydantic==2.13.5
+web3==8.0.0
+eth-account==0.14.0
+imagehash==4.3.2
+numpy==2.4.6
+scipy==1.17.1
+pywavelets==1.9.0
+slowapi==0.1.10
+limits==5.8.0
+# Tests
+pytest==9.1.1
+httpx==0.28.1
