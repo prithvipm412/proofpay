@@ -302,9 +302,9 @@ Verifier (`verifier/.env`):
 | `ESCROW_ADDRESS` | Contract address after deploy. |
 | `START_BLOCK` | The block number of the deploy transaction. |
 | `VERIFIER_PRIVATE_KEY` | Private key of the verifier testnet wallet. |
-| `DASHSCOPE_API_KEY` | From Alibaba Cloud Model Studio. |
-| `DASHSCOPE_BASE_URL` | The OpenAI-compatible base URL that the Model Studio console shows. |
-| `QWEN_VL_MODEL` | The exact model ID that the owner selects at M0. |
+| `VISION_API_KEY` | From Alibaba Cloud Model Studio. |
+| `VISION_BASE_URL` | The OpenAI-compatible base URL that the Model Studio console shows. |
+| `VISION_MODEL` | The exact model ID that the owner selects at M0. |
 | `CORS_ORIGINS` | `http://localhost:3000` and the Vercel URL, separated by commas. |
 | `DATA_ROOT` | Root folder for data. Each deployment uses `DATA_ROOT/<chainId>-<address>/`. |
 | `MIN_CONFIDENCE` | `70` |
@@ -465,7 +465,7 @@ Write one test or more for each item. All tests that exist MUST pass before each
 - V-CFG4: `-1 <= NEAR_HARD <= NEAR_WARN <= 64`. The value `-1` turns the hard near-reuse check off.
 - V-CFG5: `1 <= MIN_CONFIDENCE <= 100`. All budgets, caps and limits are positive integers. `MIN_SIGNER_BALANCE` is more than 0.
 - V-CFG6: `CORS_ORIGINS` contains valid `http` or `https` origins.
-- V-CFG7: The config version is the SHA-256 of the decision settings: `MIN_CONFIDENCE`, `NEAR_HARD`, `NEAR_WARN`, `QWEN_VL_MODEL`. Save it in each evaluation.
+- V-CFG7: The config version is the SHA-256 of the decision settings: `MIN_CONFIDENCE`, `NEAR_HARD`, `NEAR_WARN`, `VISION_MODEL`. Save it in each evaluation.
 
 ### 10.3 Readiness (V-R)
 
@@ -614,7 +614,7 @@ Do the checks in this sequence. IF a hard check fails, THEN skip the remaining h
 
 ### 10.13 Vision model call (V-M)
 
-- V-M1: Use the `openai` Python SDK with `base_url = DASHSCOPE_BASE_URL`, `api_key = DASHSCOPE_API_KEY`, `model = QWEN_VL_MODEL`, `max_retries = 0`, `temperature = 0`, `max_tokens = 200`. Timeout for each call: `min(45, remaining - 90)` seconds. IF that value is less than 15, THEN do not call; continue with V-J2.
+- V-M1: Use the `openai` Python SDK with `base_url = VISION_BASE_URL`, `api_key = VISION_API_KEY`, `model = VISION_MODEL`, `max_retries = 0`, `temperature = 0`, `max_tokens = 200`. Timeout for each call: `min(45, remaining - 90)` seconds. IF that value is less than 15, THEN do not call; continue with V-J2.
 - V-M2: Fixed system message (no task text in it):
 
 ```
@@ -658,7 +658,7 @@ If you are not sure that the work is complete, set "task_completed" to false.
     "score": 86,
     "reason": "AI check: task complete (confidence 86)",
     "evaluatedBlock": 123456,
-    "model": "<QWEN_VL_MODEL>",
+    "model": "<VISION_MODEL>",
     "configVersion": "0x...",
     "checks": [
       {"id": "V-C1", "name": "Integrity", "result": "pass", "detail": ""},
