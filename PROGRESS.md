@@ -93,11 +93,11 @@
 - (2026-10-04) M3: upload re-sends of an existing hash refresh `images.created_at`, so the 24-hour cleanup clock (V-S8) restarts. A file lock in the process orders upload commits and cleanup.
 - (2026-10-04) M3: measured event reader speed on testnet: one batch = `eth_getLogs` (about 0.7 s) + `eth_getBlock` (about 0.16 s). The first full scan of 24,086 blocks took about 215 s (about 112 blocks/s).
 - (2026-10-04) M3 smoke run (readonly, scratch data folder, values not from verifier/.env passed as environment variables): startup OK, history rebuild from START_BLOCK complete at block 68163738, then /health: V-R1..V-R8 and V-R10 pass, V-R9 fails only for the worker loop (M4). Upload of a fixture returned its exact SHA-256; /files served the preview; an animated PNG gave 400.
-
 - (2026-10-04) M3 live check (owner, own terminal, verifier/.env, VERIFIER_MODE=live, DATA_ROOT ../verifier-data): `scripts/setup_env.py --signer-from-keystore verifier` wrote the key for 0xf5310f26c9410C8cbe69f9ceDD109D709F18282c (matches contract verifier()). History rebuild complete at block 68165654 in about 4 minutes. /health: historyStatus complete; failed only V-R9 (eventReader OK, workerLoop not running, M4); V-R3 signer matches; V-R4 balance 1.0000 MON; V-R7 5 blocks behind safe head. M3 "Done when" items all true. Tests at M3 end: pytest 183 passed, forge test 67 passed.
 - (2026-10-04) M3: the manual second-copy lock check (V-07) was NOT reported by the owner (the message had the template text). The automated test `test_VT17_lock_blocks_another_process` (a second process cannot take signer.lock) passes. Next action: owner reports the manual result when convenient; V-T17 is complete in M4.
 - (2026-10-04) Owner: rebuild speed, option (b): parallel getLogs block-range requests, capped well below the RPC limit of 50 requests per second, with retries. Batches are still saved in chain order, each with its checkpoint in one transaction (V-E2). Do it before M8.
 - (2026-10-04) Owner: MPO photos are handled at M6 as proposed (test the owner's phone; IF MPO, the frontend converts to JPEG before upload, F-13).
+
 ## Open problems
 - (2026-10-04) Cutoff time came from other teams, not from the dashboard (see External checks). Next action: the owner confirms it on the hackathon dashboard before M9.
 - (2026-10-04) Privy is not set up. Next action: the owner makes the Privy app, turns on email login and gives the App ID before M5.
