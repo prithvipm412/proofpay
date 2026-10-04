@@ -4,7 +4,7 @@
 | ID | Goal | Day | Status | Date done |
 | --- | --- | --- | --- | --- |
 | M0 | Setup and external checks | 1 (4 Oct) | DONE | 2026-10-04 |
-| M1 | Contract part 1 + disposable deploy | 1 (4 Oct) | TODO | |
+| M1 | Contract part 1 + disposable deploy | 1 (4 Oct) | IN PROGRESS | |
 | M2 | Contract complete | 2 (5 Oct) | TODO | |
 | M3 | Verifier part 1 | 3 (6 Oct) | TODO | |
 | M4 | Verifier part 2 | 4 (7 Oct) | TODO | |
@@ -54,6 +54,13 @@
 - (2026-10-04) Owner: HTTP 429 is a transient error (V-M5: second call in the same round; a failed round goes to `model_retry`). This matches V-M5. With RPM 30 and one job at a time (V-J1), 429 is expected to be rare.
 - (2026-10-04) Agent: V-M1 `max_tokens` = 1024 (was 200). Measured on 2026-10-04: verdict replies used 44 completion tokens (gemini-3-flash-preview, minimal) and about 780 total tokens for each verdict call (gemma-4-26b-a4b-it). A reply cut off at the limit fails V-M4 and is transient (V-M5), so it never becomes a verdict. M4 logs completion tokens for each call so the margin can be checked.
 - (2026-10-04) Probe script `verifier/scripts/model_probe.py`: prints finish_reason, full reply and token use; PASS only IF finish_reason is "stop" and the reply names red, circle, blue and square; a second call uses the V-M2 system message and a V-M3 user message and PASS needs one complete JSON object with the four keys. Tested offline against a fake server (good, cut-off, HTTP 400 cases); the key is never printed.
+- (2026-10-04) M1: Foundry pinned to solc 0.8.36 and `evm_version = "prague"`. The Monad docs (differences page) do not name an EVM version; the default was "osaka". The contract needs no newer opcodes, so prague removes the risk of opcodes that Monad does not run.
+- (2026-10-04) M1: `network = "monad"` in foundry.toml, from the Monad docs page "Deploy a smart contract on Monad using Foundry" ("persistent equivalent of passing --network monad"). Tests and scripts run with Monad features.
+- (2026-10-04) M1: Monad charges gas on the gas LIMIT, not the gas used (docs differences page: "value + gas_bid * gas_limit"). M4 verdict transactions MUST set a gas limit close to the estimate.
+- (2026-10-04) M1: Deploy uses the template flow (9.7.1): `yarn deploy --network monad_testnet --keystore deployer` runs `script/Deploy.s.sol`, which runs `script/DeployProofPayEscrow.s.sol`. The script reads VERIFIER_ADDRESS, DISPUTE_WINDOW, REVIEW_GRACE, ARBITRATION_TIMEOUT from the shell and reverts on any chain other than 10143 and 31337 (section 4, no mainnet).
+- (2026-10-04) M1: Template issues found. (1) `scripts-js/parseArgs.js` reads LOCALHOST_KEYSTORE_ACCOUNT, but the template `.env.example` sets ETH_KEYSTORE_ACCOUNT, so a plain local `yarn deploy` fails; use `yarn deploy --keystore scaffold-eth-default` on anvil. (2) The template `script/VerifyAll.s.sol` fails `forge fmt --check`; not changed.
+- (2026-10-04) M1: Local rehearsal on anvil (chain 31337, public anvil test account #9 imported as keystore `scaffold-eth-default`, as `yarn chain` does): deploy and ABI export work; on-chain reads matched the settings (verifier, 60/300/3600, taskCount 0). Local records deleted after the test.
+- (2026-10-04) M1: `_pay` (C-07) is written in M1 but no M1 function pays. Its tests (C-T8, C-T9) come in M2 with release/refund. `TooManyAttempts` (C-15) cannot be reached until recordVerdict exists (M2, C-T3).
 - (2026-10-04) Owner instruction: start a fresh git history. The first commit is an orphan commit that holds the template snapshot at 14fa9c893ef747df2446cc3f2c08b55a58f867c0 plus the M0 changes. The template is kept as the remote `upstream`. Credit is in README.md. No published history was rewritten: the project repo starts with this commit.
 - (2026-10-04) Template bug: `scaffold.config.ts` used `chains.monad_testnet`, which viem 2.31.1 does not export (it exports `monadTestnet`). The page gave HTTP 500. Changed to `chains.monadTestnet`. M5 replaces this with our own `defineChain` (F-03).
 - (2026-10-04) LICENSE (MIT) added. It keeps the BuidlGuidl template copyright line, as MIT requires. The template file LICENCE stays unchanged.
