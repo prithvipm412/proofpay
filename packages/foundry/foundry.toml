@@ -3,6 +3,11 @@ src = 'contracts'
 out = 'out'
 libs = ['lib']
 fs_permissions = [{ access = "read-write", path = "./"}]
+# ProofPay (M1): pin the compiler; prague bytecode avoids opcodes newer than Monad needs.
+solc_version = "0.8.36"
+evm_version = "prague"
+# Monad docs (deploy with Foundry): persistent equivalent of `--network monad`.
+network = "monad"
 
 
 [rpc_endpoints]
