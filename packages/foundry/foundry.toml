@@ -8,6 +8,9 @@ solc_version = "0.8.36"
 evm_version = "prague"
 # Monad docs (deploy with Foundry): persistent equivalent of `--network monad`.
 network = "monad"
+# Monad docs (verify with Foundry): put literal sources in the metadata for Sourcify (MonadVision).
+# The docs also list `metadata` and `metadata_hash`; forge 1.7.1 reports them as unknown keys, so they are not used.
+use_literal_content = true
 
 
 [rpc_endpoints]
