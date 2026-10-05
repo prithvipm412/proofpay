@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { usePrivy } from "@privy-io/react-auth";
@@ -17,6 +18,7 @@ export const Header = () => {
   const pathname = usePathname();
   const { ready, authenticated, login, logout } = usePrivy();
   const { address } = useAccount();
+  const [copied, setCopied] = useState(false);
   const { data: balance } = useBalance({
     address,
     chainId: monadTestnet.id,
@@ -52,9 +54,22 @@ export const Header = () => {
           ) : (
             <>
               <div className="text-right leading-tight">
-                <div className="font-mono text-xs text-muted" title={address}>
-                  {address ? shortAddress(address) : "Preparing wallet…"}
-                </div>
+                {address ? (
+                  <button
+                    className="font-mono text-xs text-muted hover:text-ink"
+                    title="Copy your full address"
+                    onClick={() =>
+                      navigator.clipboard.writeText(address).then(() => {
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 1500);
+                      })
+                    }
+                  >
+                    {copied ? "Copied" : shortAddress(address)}
+                  </button>
+                ) : (
+                  <div className="text-xs text-muted">Preparing wallet…</div>
+                )}
                 <div className="font-semibold">{balance ? `${formatMon(balance.value)} MON` : "…"}</div>
               </div>
               <a className="link text-xs" href={FAUCET_URL} target="_blank" rel="noreferrer">
