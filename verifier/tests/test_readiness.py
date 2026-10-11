@@ -1,6 +1,7 @@
 """Readiness (V-R1..V-R10), V-T14, startup checks (V-03, V-CFG3, V-R5) and the signer lock (V-07)."""
 
 import os
+import pathlib
 import subprocess
 import sys
 import time
@@ -181,12 +182,15 @@ def test_VT17_lock_blocks_another_process(live, tmp_path):
         f"try:\n    acquire_signer_lock(pathlib.Path({str(live.data_dir)!r}))\n    print('GOT')\n"
         "except SignerLockError:\n    print('LOCKED')"
     )
+    verifier_dir = pathlib.Path(__file__).resolve().parents[1]  # the child imports `app` from here
     try:
-        out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=30).stdout
+        out = subprocess.run(
+            [sys.executable, "-c", code], capture_output=True, text=True, timeout=30, cwd=verifier_dir
+        ).stdout
         assert out.strip() == "LOCKED"
     finally:
         services.close()
-    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=30).stdout
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=30, cwd=verifier_dir).stdout
     assert out.strip() == "GOT"
 
 
