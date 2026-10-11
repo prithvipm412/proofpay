@@ -2,7 +2,7 @@
 
 ## Morning summary (2026-10-12, overnight session, 00:50–03:45 IST)
 
-**Where things stand:** M7 and M8 code is done and pushed. Everything left needs you: the list is "Needs owner" just below (A to G, in order; about 2.5 h including two 1-hour waits that need no attention). Live verifier (port 8000, `ready: true`) and `yarn start` (port 3000) are running in the agent session.
+**Where things stand:** M7 and M8 code is done and pushed. Everything left needs you: the list is "Needs owner" below the milestone table (A to G, in order; about 2.5 h including two 1-hour waits that need no attention). Live verifier (port 8000, `ready: true`) and `yarn start` (port 3000) are running in the agent session.
 
 **Done overnight**
 - M7: local trust test 9/9 PASS (release, dispute -> resolve both ways, dispute -> expire, refunds, crash recovery after evaluated/signed/broadcast, reuse blocked after restarts). One-command testnet runner `verifier/scripts/trust_testnet.py` (rehearsed on anvil 9/9). Frontend: red "Duplicate photo" notice for demo step 8, refund reason for demo step 9.
@@ -17,7 +17,7 @@
 3. Vercel: building `packages/nextjs` on its own failed (Yarn Plug'n'Play). Fixed with `packages/nextjs/.yarnrc.yml`; the isolated build now passes.
 4. Privy: once you add the Vercel domain, also add `http://localhost:3000`, or local login stops working.
 
-**Decisions to review:** PROGRESS "Decisions", all entries dated 2026-10-12 (the F-17 polling change for the ngrok quota is the only change to a written requirement).
+**Decisions to review:** PROGRESS "Decisions", all entries dated 2026-10-12 (two of them change a written requirement: F-17 report polling, for the ngrok quota, and V-M4, which now allows one leading thought block).
 
 ## Milestones
 | ID | Goal | Day | Status | Date done |
