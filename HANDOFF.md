@@ -1,12 +1,14 @@
-# Handoff — 2026-10-11
+# Handoff — 2026-10-12
 
 Rules: `AGENTS.md` (= `CLAUDE.md`). Full log: `PROGRESS.md`. Owner target: submit 13 Oct 2026 before 12:00 IST.
 
-## Current state
+## Current state (2026-10-12, overnight session; owner asleep until about 9 AM)
 
 - M0–M4: DONE. Contract deployed and verified: `10143:0x0f8ae1306c78fcf7bf998f8b8ee88add1bd7a0cf`.
-- M5: IN PROGRESS. Frontend part (F-01..F-09, F-12, F-20..F-23) is done and checked by the owner (task #2 from the browser). Calibration is not closed.
-- M6: the owner said to start it in parallel with M5 (2026-10-11). Code for F-10, F-11, F-13..F-19 is written and committed (Codex, then reviewed by Claude Code). Open: the owner's two-account browser run of demo steps 1 to 7 on testnet, the closed-browser check, and the phone test (360 px, camera, MPO).
+- M5: IN PROGRESS (calibration not closed; see below). M6: code done; owner tests open (phone test moved to M8 by the owner).
+- M7: IN PROGRESS. Code and local tests are done: `scripts/trust_local.py` (9/9 PASS), `scripts/trust_testnet.py --rehearse` (9/9 PASS), frontend notices for demo steps 8/9, V-M4 thought-block parse fix. Left: the owner runs `scripts/trust_testnet.py` on testnet (PROGRESS "Needs owner" item 1), then the agent copies the hashes and marks M7 DONE.
+- M8: next (backup.py/restore.py + V-T16, hosting prep, README). Owner overnight rule: do not stop to ask; record decisions in PROGRESS; put owner steps in PROGRESS "Needs owner"; write a morning summary at the top of PROGRESS when only owner items are left.
+- Running in the agent session: live verifier (port 8000, log `verifier-data/logs/verifier-live.log`) and `yarn start` (port 3000, log `verifier-data/logs/next-dev.log`). They stop when the session ends.
 
 ## Left in M5
 
