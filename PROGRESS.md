@@ -51,7 +51,7 @@ Do these in this order. Commands are for macOS zsh. `~/proofpay` is the repo. Ea
 3. Answer Vercel's questions with the defaults (set up and deploy: yes; scope: your account; link to an existing project: no; project name: proofpay; directory: ./; change settings: no).
 4. Copy the "Production" URL it prints (`https://<project>.vercel.app`).
 5. `cd verifier && .venv/bin/python scripts/setup_env.py --add-cors-origin https://<project>.vercel.app`, then restart the verifier (Ctrl+C in its terminal, then the B step 4 command again).
-6. Privy dashboard (https://dashboard.privy.io) > your app > Configuration > App settings > Domains (allowed origins): add `https://<project>.vercel.app`.
+6. Privy dashboard (https://dashboard.privy.io) > select the app > Configuration > App settings > Domains tab > Allowed Origins: add `https://<project>.vercel.app` AND `http://localhost:3000` (once the list is not empty, every origin that is not in it fails, including localhost; Privy docs recipes/dashboard/allowed-domains).
 7. Tell the agent both URLs (it updates the README and PROGRESS).
 
 **F. Phone test on the public URL (M6 two-account test + M6 phone test + M8 "Done when"; about 20 min)**
