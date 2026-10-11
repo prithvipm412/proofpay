@@ -484,6 +484,7 @@ def main() -> int:
         r1, r1_photo = net.recovery("R1", "evaluated", amount, on_approved=net.dispute_resolve)
         print("3. Recovery after `signed` (task R2), then R2: dispute (right after the approval)")
         r2, _ = net.recovery("R2", "signed", amount, on_approved=net.dispute_only)
+        net.expire_later = r2
         print("4. Recovery after `broadcast` (task R3), then R3: release after the window")
         r3, _ = net.recovery("R3", "broadcast", amount)
         net.release(r3)
@@ -504,6 +505,8 @@ def main() -> int:
         print("\nStopped by the user.")
         if net:
             net.results.append(("run completed", False))
+            if getattr(net, "expire_later", None) and not args.rehearse:
+                print(f"To end the dispute later: .venv/bin/python scripts/trust_testnet.py --expire {net.expire_later}")
     except Exception as exc:
         print(f"ERROR: {type(exc).__name__}: {exc}")
         if net:
