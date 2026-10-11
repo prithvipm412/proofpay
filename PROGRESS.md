@@ -16,16 +16,53 @@
 | M10 | Submit | 10 (13 Oct) | TODO | |
 
 ## Needs owner
-Steps for the owner, in this order. Commands are for macOS zsh, from the repo root `~/proofpay` unless a `cd` is shown.
+Do these in this order. Commands are for macOS zsh. `~/proofpay` is the repo. Each item says what shows success.
 
-1. **M7 testnet run (about 15 min, then 1 h of waiting that needs no attention).** It does the recovery test, dispute -> resolve, dispute -> expire, release, demo step 8 (reuse) and demo step 9 (refund) on Monad testnet.
-   1. See IF a verifier runs: `lsof -nP -iTCP:8000 -sTCP:LISTEN`. IF a line with a PID shows, stop it: `kill <PID>`. Run the `lsof` command again until it shows nothing.
-   2. `cd ~/proofpay/verifier && .venv/bin/python scripts/trust_testnet.py`
-   3. Type the `deployer` keystore password, then the `worker` keystore password (cast asks for each).
-   4. Success: each step prints `PASS`. After step 6 it prints "Start your normal verifier now in another terminal". Then open a second terminal and run `cd ~/proofpay/verifier && .venv/bin/python -m app.main`. Leave the first terminal open; step 7 runs about 1 hour later and prints `PASS`, then the "Results" list (all `PASS`).
-   5. The transaction hashes are printed and saved in `verifier-data/trust-testnet-<time>.json`. Tell the agent; it copies them into "Important transactions" and marks M7 DONE.
-   - IF a step prints `FAIL` or `ERROR`: keep the output and the log file it names (`verifier-data/logs/trust-testnet-verifier-*.log`) and give them to the agent. Start the normal verifier again (step 4 command).
-2. **M6 browser test with two email accounts** (demo steps 1 to 7). This can be done together with the M8 phone test on the public URL (item in M8 list below), so it is done once.
+**A. Quick answers (reply in the chat; about 5 min)**
+1. Thresholds (V-C11): approve `NEAR_HARD = 4` and `NEAR_WARN = 10`, and closing M5 with 21 pairs (read `docs/calibration.md`, section "Limitations"). IF you still add the 9 phone pairs: put them in `~/Desktop/phone-photos-raw` and tell the agent to copy them (macOS blocks the agent from reading Desktop unless you allow it in System Settings > Privacy & Security > Files and Folders), or copy them yourself into `verifier-data/calibration/<place>/<occasion>_before|after.jpg`.
+2. Admission for judging (V-A7, M8 task 7): agent proposal is `ADMISSION_MODE=open` with the current caps (10 per poster, 10 per worker, 150 checks, 300 model calls, 150 verdict transactions per UTC day; queue 50). Answer "open OK" or give other values.
+3. AI tools disclosure (README section 10): the draft says Claude Code and OpenAI Codex. Confirm or correct the list.
+4. Cutoff time: open the hackathon dashboard and confirm "14 Oct 2026, 03:59 UTC" (External checks).
+5. Model lifetime: in Google AI Studio, check that `gemma-4-26b-a4b-it` has no announced shutdown before 2026-11-15.
+
+**B. M7 testnet run (about 15 min of work, then about 1 h of waiting).** Recovery test, dispute -> resolve, dispute -> expire, release, demo step 8 (reuse) and demo step 9 (refund) on Monad testnet. It also does the M8 restart test (an accepted photo is blocked again after verifier restarts).
+1. See IF a verifier runs: `lsof -nP -iTCP:8000 -sTCP:LISTEN`. IF a line with a PID shows, stop it: `kill <PID>`. Run the `lsof` command again until it shows nothing.
+2. `cd ~/proofpay/verifier && .venv/bin/python scripts/trust_testnet.py`
+3. Type the `deployer` keystore password, then the `worker` keystore password (cast asks for each).
+4. Success: each step prints `PASS`. After step 6 it prints "Start your normal verifier now in another terminal". Open a second terminal: `cd ~/proofpay/verifier && caffeinate -ims .venv/bin/python -m app.main`. Leave the first terminal open; step 7 prints `PASS` about 1 hour later, then the "Results" list (all `PASS`).
+5. Optional: open `http://localhost:3000/tasks/<R4 task number>` in the browser and look at the red "Duplicate photo" notice (demo step 8).
+6. Tell the agent. The hashes are saved in `verifier-data/trust-testnet-<time>.json`; the agent copies them into "Important transactions" and marks M7 DONE.
+- IF a step prints `FAIL` or `ERROR`: keep the output and the log file it names (`verifier-data/logs/trust-testnet-verifier-*.log`) for the agent, and start the normal verifier again (step 4 command).
+
+**C. M8 backup test (after B; about 1 h, no attention needed).** A backup was made at 02:27 IST, before B. After B made new accepted proofs, the restore must show them.
+1. `cd ~/proofpay/verifier && .venv/bin/python scripts/restore.py ../verifier-data/backups/proofpay-backup-10143-0x0f8ae1306c78fcf7bf998f8b8ee88add1bd7a0cf-20261011T205705Z.tar.gz`
+2. Success (after about 1 h): `RESTORE CHECK OK`, and the list shows the B tasks as "both … (accepted after the backup)". The live verifier keeps running; the restore copy is readonly and never signs. (The agent can run this instead IF its session is still running.)
+
+**D. Public verifier with ngrok (during the 1-h wait in B; about 10 min)**
+1. Make a free account at https://dashboard.ngrok.com/signup.
+2. `brew install ngrok`
+3. In the ngrok dashboard, copy "Your Authtoken", then: `ngrok config add-authtoken <TOKEN>`
+4. With the verifier running (B step 4), in a third terminal: `ngrok http 8000`. Copy the `Forwarding` URL (`https://<name>.ngrok-free.app`). It stays the same each time you start ngrok.
+5. Success: `curl -s -H "ngrok-skip-browser-warning: 1" https://<name>.ngrok-free.app/health` prints JSON with `"deploymentId": "10143:0x0f8ae1306c78fcf7bf998f8b8ee88add1bd7a0cf"`.
+
+**E. Frontend on Vercel (about 10 min)**
+1. `cd ~/proofpay && yarn vercel:login` (log in with GitHub or email in the browser).
+2. `verifier/.venv/bin/python scripts/deploy_frontend.py --verifier-url https://<name>.ngrok-free.app`
+3. Answer Vercel's questions with the defaults (set up and deploy: yes; scope: your account; link to an existing project: no; project name: proofpay; directory: ./; change settings: no).
+4. Copy the "Production" URL it prints (`https://<project>.vercel.app`).
+5. `cd verifier && .venv/bin/python scripts/setup_env.py --add-cors-origin https://<project>.vercel.app`, then restart the verifier (Ctrl+C in its terminal, then the B step 4 command again).
+6. Privy dashboard (https://dashboard.privy.io) > your app > Configuration > App settings > Domains (allowed origins): add `https://<project>.vercel.app`.
+7. Tell the agent both URLs (it updates the README and PROGRESS).
+
+**F. Phone test on the public URL (M6 two-account test + M6 phone test + M8 "Done when"; about 20 min)**
+1. On the phone, open `https://<project>.vercel.app`. Log in with email A, get test MON from the faucet link, post a task with a before photo (0.05 MON, "Demo: 10 minutes").
+2. In a private window (or another device), log in with email B, accept the task, take the after photo with the camera, submit. Wait for the report.
+3. After "60 seconds", push Release. Open the transaction in Details (explorer).
+4. Close the browser right after a submit once: the check must still finish (open the task again later).
+5. Demo step 8: with a third account (or B on a new task), submit the same after photo for another task: "Duplicate photo" must show and the MON stays locked. Demo step 9: refund a task after its time limit.
+6. Check that every screen fits the phone width with no sideways scrolling. Tell the agent any problem.
+
+**G. M9 (owner parts)**: timed practice recording (3 min, `docs/demo-script.md`), demo video, pitch video (`docs/pitch.md`), upload the logo (`docs/logo.svg`), section 15 review with the agent, then submit (M10 checklist, README section 14.2).
 
 ## External checks (M0)
 - Cutoff time and time zone: 14 Oct 2026, 03:59 UTC (= 13 Oct 11:59 PM US Eastern, 14 Oct 09:29 IST). Source (2026-10-04): owner, quoting other teams who quoted the rules. NOT yet confirmed by the owner on the hackathon dashboard. Owner target stays 13 Oct before 12:00 IST.
