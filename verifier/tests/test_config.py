@@ -3,7 +3,7 @@
 import pytest
 
 from app.config import ConfigError, load_settings
-from tests.conftest import ANVIL_ADDR_1, ANVIL_KEY_1, base_env
+from tests.conftest import ANVIL_ADDR_1, ANVIL_KEY_1, base_env, make_settings
 
 
 def bad(tmp_path, **overrides) -> str:
@@ -132,3 +132,11 @@ def test_VCFG7_config_version_follows_decision_settings_only(tmp_path):
     for change in ({"MIN_CONFIDENCE": "71"}, {"NEAR_HARD": "3"}, {"NEAR_WARN": "11"}, {"VISION_MODEL": "other"}):
         assert load_settings(base_env(tmp_path, **change)).config_version != a.config_version
     assert a.config_version.startswith("0x") and len(a.config_version) == 66
+
+
+def test_M7_crash_switch_values(tmp_path):
+    assert make_settings(tmp_path).crash_after_state == ""  # off by default
+    for state in ("evaluated", "signed", "broadcast"):
+        assert make_settings(tmp_path, VERIFIER_MODE="live", CRASH_AFTER_STATE=state).crash_after_state == state
+    assert "CRASH_AFTER_STATE" in bad(tmp_path, VERIFIER_MODE="live", CRASH_AFTER_STATE="queued")
+    assert "CRASH_AFTER_STATE needs VERIFIER_MODE=live" in bad(tmp_path, CRASH_AFTER_STATE="signed")

@@ -170,6 +170,8 @@ class Readiness:
                 warnings.append("verdict_conflict")
         if self.reader.last_error:
             warnings.append("event_reader_error")
+        if s.crash_after_state:
+            warnings.append(f"crash_test_armed:{s.crash_after_state}")  # M7 recovery test switch is on
         oldest = self.storage.oldest_eligible_job_created_at(now)
         blocks, _ = self.reader.lag(safe_box.get("safe"))
         ready = all(i.ok for i in items)

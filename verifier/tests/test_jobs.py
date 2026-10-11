@@ -4,6 +4,7 @@ Tests V-T5, V-T6, V-T7, V-T8, V-T10, V-T11 (job part), V-T17 (worker part), V-T1
 A "restart" is a new Worker on the same data folder (the old one is dropped without cleanup).
 """
 
+import dataclasses
 import json
 
 import pytest
@@ -334,6 +335,44 @@ def test_VT7_crash_after_inclusion_before_db_update(h):
     h.run()
     h.chain.include(h.job(key)["raw_tx"])  # mined while the verifier was down
     h.restart()
+    h.run()
+    _one_tx(h, key)
+
+
+class Crashed(BaseException):
+    """A planned crash. BaseException, so no `except Exception` in the worker can catch it."""
+
+
+def _crash():
+    raise Crashed
+
+
+@pytest.mark.parametrize(
+    "state, mined_before_crash",
+    [("evaluated", True), ("signed", True), ("broadcast", True), ("broadcast", False)],
+)
+def test_M7_crash_switch_then_restart_one_tx(tmp_path, state, mined_before_crash):
+    """M7 task 3: CRASH_AFTER_STATE stops the process right after the state is saved. A restart
+    without the switch ends `confirmed` with one signed transaction and one raw_tx."""
+    h = H(tmp_path, CRASH_AFTER_STATE=state)
+    h.worker.crash = _crash
+    h.chain.auto_mine = mined_before_crash
+    key = h.task(1)
+    with pytest.raises(Crashed):
+        h.run()
+    assert h.state(key) == state
+    assert len(h.chain.signed) == (0 if state == "evaluated" else 1)
+    h.settings = dataclasses.replace(h.settings, crash_after_state="")
+    h.chain.auto_mine = True
+    h.restart()
+    h.run()
+    _one_tx(h, key)
+    assert len(h.model.calls) == 1  # never evaluated again
+
+
+def test_M7_crash_switch_off_by_default(h):
+    h.worker.crash = _crash
+    key = h.task(1)
     h.run()
     _one_tx(h, key)
 

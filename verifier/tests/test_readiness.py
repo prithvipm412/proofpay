@@ -197,3 +197,10 @@ def test_readonly_takes_no_lock(tmp_path):
     assert a.lock_fd is None and b.lock_fd is None
     fd = acquire_signer_lock(s.data_dir)  # a live start is still possible
     os.close(fd)
+
+
+def test_M7_crash_switch_shows_health_warning(tmp_path):
+    settings = make_settings(tmp_path, VERIFIER_MODE="live", CRASH_AFTER_STATE="signed")
+    _, _, readiness, _ = ready_setup(settings, FakeChain())
+    snap = readiness.refresh()
+    assert "crash_test_armed:signed" in snap["warnings"] and snap["ready"] is True

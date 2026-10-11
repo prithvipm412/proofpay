@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sqlite3
 import threading
 import time
@@ -62,6 +63,14 @@ AI_NOT_DONE = "AI check: task not complete"
 AI_LOW = "AI check: confidence {n} is below {min}"
 AI_PASS = "AI check: task complete (confidence {n})"
 REASON_MAX_BYTES = 120  # C-11
+CRASH_EXIT_CODE = 70  # M7 recovery test: process exit code of a planned crash
+
+
+def hard_exit() -> None:
+    """M7 recovery test: end the process at once, with no cleanup (like a power cut or kill -9).
+    The OS releases signer.lock; SQLite WAL keeps every committed transaction."""
+    logging.shutdown()
+    os._exit(CRASH_EXIT_CODE)
 
 
 def job_key(deployment_id: str, task_id: int, attempt: int, proof_hash: str) -> str:
@@ -230,6 +239,7 @@ class Worker:
         decode: Callable = decode_in_child,
         model_input: Callable = model_input_in_child,
         clock: Callable[[], float] = time.time,
+        crash: Callable[[], None] = hard_exit,
     ):
         self.settings = settings
         self.storage = storage
@@ -240,6 +250,7 @@ class Worker:
         self.decode = decode
         self.model_input = model_input
         self.clock = clock
+        self.crash = crash
         self.heartbeat: float | None = None  # V-R9
         self.last_error: str | None = None
         self._stop = threading.Event()
@@ -282,6 +293,13 @@ class Worker:
         with self.storage.tx() as c:
             c.execute(sql, params)
         log.info("Job %s -> %s", key.split(":", 2)[-1][:40], state)
+
+    def _crash_point(self, state: str) -> None:
+        """M7 recovery test: IF CRASH_AFTER_STATE names this state, stop the process now. The state
+        is already committed, so the next start runs the restart column of the transition table."""
+        if self.settings.crash_after_state == state:
+            log.critical("CRASH_AFTER_STATE=%s: planned crash for the recovery test", state)
+            self.crash()
 
     def _redact(self, text: str) -> str:
         for secret in (self.settings.vision_api_key, self.settings.signer_key):
@@ -490,6 +508,7 @@ class Worker:
             eval_rounds=rounds,
             last_error=None,
         )
+        self._crash_point("evaluated")
         return True
 
     def _round_failed(self, job: sqlite3.Row, problem: str) -> None:
@@ -570,6 +589,7 @@ class Worker:
             if cur.rowcount == 1:
                 bump(c, utc_day(now_s()), K_VERDICT_TX)
         log.info("Job %s signed: nonce %d, tx %s", key.split(":", 2)[-1][:40], latest, tx_hash)
+        self._crash_point("signed")
         return True
 
     # ------------------------------------------------------------ signed -> broadcast
@@ -581,6 +601,7 @@ class Worker:
             self.chain.send_raw(job["raw_tx"])
         except Exception as exc:  # the reconciler sends the same raw_tx again (V-J3 step 4)
             self._set(key, "broadcast", expect="broadcast", last_error=f"send: {type(exc).__name__}: {exc}")
+        self._crash_point("broadcast")
         hashes = json.loads(job["tx_hashes"])
         deadline = time.monotonic() + RECEIPT_WAIT_S
         while time.monotonic() < deadline and not self._stop.is_set():

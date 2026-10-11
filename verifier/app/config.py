@@ -25,6 +25,9 @@ from web3 import Web3
 VERIFIER_DIR = pathlib.Path(__file__).resolve().parent.parent
 ENV_FILE = VERIFIER_DIR / ".env"
 
+# M7 recovery test (task 3): the worker loop exits hard right after it saves one of these states.
+CRASH_STATES = ("evaluated", "signed", "broadcast")
+
 ALLOWED_CHAIN_IDS = (10143, 31337)  # V-CFG1. 143 (Monad mainnet) is never allowed (section 4).
 LOCAL_RPC_URLS = ("http://127.0.0.1:8545", "http://localhost:8545")  # V-CFG2
 LOCAL_HOSTS = ("localhost", "127.0.0.1")
@@ -78,6 +81,7 @@ class Settings:
     admission_until: datetime = datetime(2026, 11, 15, tzinfo=timezone.utc)
     safe_head_method: str = "finalized"
     safe_head_offset: int = 0  # N for latest-minus-N
+    crash_after_state: str = ""  # CRASH_AFTER_STATE, M7 recovery test only; empty = off
 
     @property
     def deployment_id(self) -> str:
@@ -276,6 +280,13 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         else:
             problems.append("SAFE_HEAD_METHOD must be finalized or latest-minus-<N>")
 
+    # M7 recovery test switch. Optional; empty in normal operation.
+    crash_after = get("CRASH_AFTER_STATE", required=False)
+    if crash_after and crash_after not in CRASH_STATES:
+        problems.append("CRASH_AFTER_STATE must be empty, evaluated, signed or broadcast")
+    if crash_after and mode != "live":
+        problems.append("CRASH_AFTER_STATE needs VERIFIER_MODE=live (a readonly copy never reaches these states)")
+
     if problems:
         raise ConfigError("Settings are not valid:\n  - " + "\n  - ".join(problems))
 
@@ -309,4 +320,5 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         admission_until=admission_until,
         safe_head_method=safe_method,
         safe_head_offset=safe_offset,
+        crash_after_state=crash_after,
     )
