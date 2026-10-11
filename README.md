@@ -293,6 +293,7 @@ _Owner to confirm the final list at M8._ This project was built with AI coding a
 - Notifications for posters and workers.
 - An upgradeable contract design (this version has no proxy on purpose).
 - Monad mainnet deployment.
+- Timeline and report-check animations (cut for time; colors and layout are kept).
 
 ## 12. License
 
