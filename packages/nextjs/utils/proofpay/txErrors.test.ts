@@ -1,5 +1,5 @@
 import { NotEnoughMonError } from "./fees";
-import { describeTxError, revertErrorName } from "./txErrors";
+import { CONTRACT_ERRORS, describeTxError, revertErrorName } from "./txErrors";
 import { ContractFunctionRevertedError, InsufficientFundsError, UserRejectedRequestError } from "viem";
 import { describe, expect, it } from "vitest";
 import { escrowAbi } from "~~/utils/proofpay/escrow";
@@ -23,9 +23,17 @@ describe("describeTxError", () => {
     expect(describeTxError(new UserRejectedRequestError(new Error("no")))).toBe("You cancelled this action.");
   });
 
-  it("names the contract error", () => {
+  it("F-18 translates the contract error into a sentence", () => {
     expect(revertErrorName(reverted("AmountTooLow"))).toBe("AmountTooLow");
-    expect(describeTxError(reverted("AmountTooLow"))).toMatch(/AmountTooLow/);
+    expect(describeTxError(reverted("AmountTooLow"))).toBe("The payment must be at least 0.001 MON.");
+  });
+
+  it("F-18 covers every error in the deployed ABI without technical main-path words", () => {
+    for (const item of escrowAbi) {
+      if (item.type !== "error") continue;
+      expect(CONTRACT_ERRORS[item.name], item.name).toBeTruthy();
+      expect(describeTxError(reverted(item.name))).not.toMatch(/transaction|gas|hash|0x/i);
+    }
   });
 
   it("keeps plain app messages and hides others", () => {
