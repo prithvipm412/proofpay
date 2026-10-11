@@ -8,27 +8,22 @@ Rules: `AGENTS.md` (= `CLAUDE.md`). Full log: `PROGRESS.md`. Owner target: submi
 - M5: IN PROGRESS. `docs/calibration.md` is written as a PROPOSAL (21 pairs, V-C11 PASS at NEAR_HARD 4); owner approval open.
 - M6: code done; owner tests open (two accounts; phone test moved to M8).
 - M7: IN PROGRESS. Code + local tests done (`trust_local.py` 9/9, `trust_testnet.py --rehearse` 9/9, demo 8/9 notices, V-M4 thought-block fix). Open: owner runs `verifier/scripts/trust_testnet.py` (PROGRESS Needs owner B).
-- M8: IN PROGRESS. Done: backup/restore (V-B1, V-B2, V-T16) + first real backup (02:27); README; deploy helpers (`scripts/deploy_frontend.py`, `setup_env.py --add-cors-origin`); ngrok header + quota-friendly polling; `blocked_nonce.py`. A readonly restore check of the 02:27 backup runs in the agent session (port 8002, output `verifier-data/logs/restore-20261012-a.out`). Open: ngrok, Vercel, Privy domains, phone test, admission choice, AI tools list (Needs owner A, C–F).
+- M8: IN PROGRESS. Done: backup/restore (V-B1, V-B2, V-T16) + first real backup (02:27); README; deploy helpers (`scripts/deploy_frontend.py`, `setup_env.py --add-cors-origin`); ngrok header + quota-friendly polling; `blocked_nonce.py`. Readonly restore check of the 02:27 backup: RESTORE CHECK OK (60 min rebuild; folder `verifier-data/restore-20261012-a/`). Open: ngrok, Vercel, Privy domains, phone test, admission choice, AI tools list (Needs owner A, C–F).
 - M9 prep done: `docs/demo-script.md`, `docs/pitch.md`, `docs/brand/logo.png|svg`, `docs/brand/cover.png|svg`, `docs/release-gate.md` (15.1 evidence; testnet parts open).
 - **The owner's to-do list is PROGRESS.md "Needs owner" (A to G, in order).** Every decision of this session is in PROGRESS "Decisions" (2026-10-12 entries).
-- Running in the agent session: live verifier (port 8000, log `verifier-data/logs/verifier-live.log`), `yarn start` (port 3000, log `verifier-data/logs/next-dev.log`), restore check (port 8002). They stop when the session ends.
+- Running in the agent session: live verifier (port 8000, log `verifier-data/logs/verifier-live.log`), `yarn start` (port 3000, log `verifier-data/logs/next-dev.log`). They stop when the session ends.
 - Tests now: forge 67, verifier pytest 337, frontend Vitest 92 (all pass); `next build` passes (`NEXT_DIST_DIR=.next-build yarn build`).
 - Agent-only notes: the agent cannot read `~/Desktop` (macOS privacy prompt; an `ls` hangs). Do not run `yarn vercel <anything>`: the template script starts a deploy. Headless Chrome screenshots: `verifier-data/scratch/cdp_shot.py URL OUT.png W H WAIT` (DevTools protocol; plain `--screenshot` hangs because the page polls).
 
-## Left in M5
+## Left for the agent after the owner acts
 
-1. The owner shoots the last 9 pairs today: master-bed second visit, 6 new places (morning), second visits to 2 of them (evening). They go into `~/Desktop/phone-photos-raw`.
-2. Copy only the new files (check with SHA-256) into `verifier-data/calibration/<place>/<occasion>_before|after.jpg`. Group them by what the photo shows. Pair them in time order. Morning and evening are separate visits (`oct11am` / `oct11pm`). Add a `small-` prefix only for pairs that the owner names. Add each file to `verifier-data/calibration/SOURCES.txt`. The 14 earlier phone photos are already copied (21 pairs, 18 places now).
-3. Run `calibrate.py` (command below). Choose the thresholds on the calibration set only. Report raw counts on the validation set. Apply V-C11.
-4. Write `docs/calibration.md` (it does not exist yet). The owner approves the values. Mark M5 DONE.
+1. After Needs owner A1: IF the owner approves 4/10 and 21 pairs, mark M5 DONE (PROGRESS table, `docs/calibration.md` status line and checkboxes). IF new photos arrive: copy only new files (check SHA-256) into `verifier-data/calibration/<place>/<occasion>_before|after.jpg`, pair by content and time, `small-` prefix only when the owner names it, add to `SOURCES.txt`, run `calibrate.py`, update `docs/calibration.md`.
+2. After B: copy the rows from `verifier-data/trust-testnet-<time>.json` into PROGRESS "Important transactions"; IF all PASS, mark M7 DONE (and the testnet parts of `docs/release-gate.md` rows 5 and 6). Then run C (restore of the 02:27 backup; about 1 h; must list the B tasks as "accepted after the backup").
+3. After D/E: put the two URLs in README (table at the top, section 8/9 as needed) and PROGRESS (Deployments note / Versions). Push.
+4. After A2/A3: README section 6 (admission) and section 10 (AI tools) final text.
+5. After F/G: README section 6 last bullet (15.2 item 8), `docs/release-gate.md`, M8 and M9 status. M10: go through README 14.2 with the owner.
 
-## Left in M6
-
-Owner tests only: demo steps 1 to 7 with two email accounts on testnet; close the browser after submitProof and confirm the check still finishes; the phone test (360 px, camera upload, MPO conversion). The live verifier MUST be caught up (`ready: true`) first.
-Existing code to build on: `app/tasks/[id]/page.tsx` (first version), `hooks/proofpay/useEscrowTx.ts` (send one call), `hooks/proofpay/useTasks.ts`, `utils/proofpay/verifier.ts` (upload), `components/WithdrawBanner.tsx` (F-06 is already done).
-Verifier report endpoints: `GET /tasks/{id}/attempts` and `GET /tasks/{id}/attempts/{n}` (V-22 format, `verifier/app/jobs.py` `build_report`). `POST /verify {"taskId": n}`.
-
-## Commands (macOS, zsh, from the repo root)
+## Commands (macOS, zsh, from the repo root)## Commands (macOS, zsh, from the repo root)
 
 ```
 # Verifier (reads verifier/.env; do not print it). Port 8000.
