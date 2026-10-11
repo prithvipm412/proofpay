@@ -1,4 +1,5 @@
 import { TaskStatus } from "./escrow";
+import { Report, SETTLED_JOB_STATES, currentReport } from "./reports";
 import type { Task } from "~~/hooks/proofpay/useTasks";
 
 export type TaskAction = "acceptTask" | "submitProof" | "refund" | "dispute" | "release" | "expireDispute";
@@ -59,4 +60,25 @@ export function refundNote(task: Task, now: number, isPoster: boolean): string |
           : null;
   if (!reason) return null;
   return isPoster ? `${reason} You can take your MON back with Refund.` : `${reason} The poster can take the MON back.`;
+}
+
+/**
+ * F-17 with the ngrok monthly request quota (M8): reports change only while a check can still run.
+ * Submitted: every 3 s (backoff on errors), every 30 s after reviewBy. Other open statuses: every 15 s
+ * until the current attempt's report is settled, then no more reads. Final statuses: none.
+ * The caller also refetches when the task status or attempt changes.
+ */
+export function reportPollDelay(
+  task: Pick<Task, "status" | "attempts" | "proofHash" | "reviewBy"> | undefined,
+  reports: Report[] | undefined,
+  failures: number,
+  now: number,
+): number | false {
+  if (!task || task.attempts === 0 || isFinal(task.status)) return false;
+  const delay = pollDelay(failures) as number;
+  if (task.status === TaskStatus.Submitted) return now >= Number(task.reviewBy) ? Math.max(30_000, delay) : delay;
+  const current = reports && currentReport(reports, task.attempts, task.proofHash);
+  if (current && (current.attemptResult !== "none" || SETTLED_JOB_STATES.includes(current.jobState ?? "")))
+    return false;
+  return Math.max(15_000, delay);
 }

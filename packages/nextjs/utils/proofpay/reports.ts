@@ -1,4 +1,5 @@
 import { settings } from "./settings";
+import { verifierFetch } from "./verifier";
 
 export type Check = { id: string; name: string; result: "pass" | "warn" | "fail" | "skipped"; detail: string };
 export type Report = {
@@ -18,6 +19,8 @@ export type Report = {
   };
   settlement: { state: string; txHashes: string[]; error: string | null; conflict: boolean };
 };
+/** Job states that do not change any more (V-J terminal states). */
+export const SETTLED_JOB_STATES = ["confirmed", "reverted", "superseded", "expired", "model_failed", "not_admitted"];
 const states = [
   "queued",
   "awaiting_files",
@@ -134,13 +137,13 @@ export function jobMessage(state: string | null | undefined, reviewBy: bigint): 
 }
 
 export async function fetchReports(id: bigint, signal?: AbortSignal): Promise<Report[]> {
-  const response = await fetch(`${settings.verifierUrl}/tasks/${id}/attempts`, { signal, cache: "no-store" });
+  const response = await verifierFetch(`${settings.verifierUrl}/tasks/${id}/attempts`, { signal, cache: "no-store" });
   if (!response.ok) throw new Error("Reports are temporarily unavailable. Checking can continue in the background.");
   return parseReports(await response.json(), id, `${settings.chainId}:${settings.escrowAddress.toLowerCase()}`);
 }
 
 export async function requestVerification(id: bigint): Promise<void> {
-  const response = await fetch(`${settings.verifierUrl}/verify`, {
+  const response = await verifierFetch(`${settings.verifierUrl}/verify`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ taskId: Number(id) }),

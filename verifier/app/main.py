@@ -137,7 +137,11 @@ def create_app(services: Services, start_threads: bool = True) -> FastAPI:
         CORSMiddleware,  # V-05. CORS is not access control.
         allow_origins=list(s.cors_origins),
         allow_methods=["GET", "POST"],
-        allow_headers=["Content-Type"],
+        # The frontend sends ngrok-skip-browser-warning so that the ngrok free-plan warning page is not
+        # returned instead of JSON or a preview (M8 host). Preflights are cached for 2 h (Chrome's maximum),
+        # because each request counts toward the ngrok monthly quota.
+        allow_headers=["Content-Type", "ngrok-skip-browser-warning"],
+        max_age=7200,
     )
 
     @app.get("/health")  # V-08

@@ -2,6 +2,16 @@ import { settings } from "./settings";
 
 const HASH_RE = /^0x[0-9a-f]{64}$/;
 
+/**
+ * M8 host: the verifier runs behind an ngrok free domain. Without this header ngrok can answer a
+ * browser request with its warning page (HTML) instead of JSON or a photo. It is harmless locally.
+ */
+export const VERIFIER_HEADERS = { "ngrok-skip-browser-warning": "1" } as const;
+
+export function verifierFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  return fetch(url, { ...init, headers: { ...VERIFIER_HEADERS, ...(init.headers as Record<string, string>) } });
+}
+
 /** SHA-256 of the file bytes, as `0x` + 64 lowercase hex characters (the proof hash format). */
 export async function sha256Hex(bytes: ArrayBuffer): Promise<`0x${string}`> {
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
@@ -39,7 +49,7 @@ export async function uploadPhoto(file: Blob, baseUrl = settings.verifierUrl): P
 
   let response: Response;
   try {
-    response = await fetch(`${baseUrl}/upload`, { method: "POST", body });
+    response = await verifierFetch(`${baseUrl}/upload`, { method: "POST", body });
   } catch {
     throw new Error("The checking service is not reachable. Try again in a minute.");
   }
@@ -55,3 +65,25 @@ export async function uploadPhoto(file: Blob, baseUrl = settings.verifierUrl): P
 
 /** V-10: public preview of a stored photo. */
 export const previewUrl = (sha256: string, baseUrl = settings.verifierUrl) => `${baseUrl}/files/${sha256}`;
+
+const previews = new Map<string, Promise<string>>();
+
+/**
+ * Loads a preview with the ngrok header (an <img> tag cannot send headers) and returns an object URL.
+ * Each photo is loaded once per page session; the HTTP cache keeps it after that (immutable, V-10).
+ * A reply that is not an image (for example a warning page) counts as "no preview".
+ */
+export function loadPreview(sha256: string, baseUrl = settings.verifierUrl): Promise<string> {
+  const key = `${baseUrl}|${sha256.toLowerCase()}`;
+  let pending = previews.get(key);
+  if (!pending) {
+    pending = verifierFetch(previewUrl(sha256, baseUrl)).then(async response => {
+      if (!response.ok || !(response.headers.get("content-type") ?? "").startsWith("image/"))
+        throw new Error("No preview");
+      return URL.createObjectURL(await response.blob());
+    });
+    pending.catch(() => previews.delete(key)); // a failed load can be tried again later
+    previews.set(key, pending);
+  }
+  return pending;
+}

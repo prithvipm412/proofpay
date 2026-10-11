@@ -135,3 +135,26 @@ def test_V05_cors_allows_only_configured_origins(client):
         "/upload", headers={"Origin": "https://evil.example", "Access-Control-Request-Method": "POST"}
     )
     assert "access-control-allow-origin" not in bad.headers
+
+
+def test_M8_cors_allows_the_ngrok_header_and_caches_preflight(client):
+    r = client.options(
+        "/tasks/1/attempts",
+        headers={
+            "Origin": "https://proofpay.vercel.app",
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "ngrok-skip-browser-warning",
+        },
+    )
+    assert r.status_code == 200
+    assert "ngrok-skip-browser-warning" in r.headers.get("access-control-allow-headers", "").lower()
+    assert r.headers.get("access-control-max-age") == "7200"
+    other = client.options(
+        "/tasks/1/attempts",
+        headers={
+            "Origin": "https://proofpay.vercel.app",
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "x-something-else",
+        },
+    )
+    assert other.status_code == 400

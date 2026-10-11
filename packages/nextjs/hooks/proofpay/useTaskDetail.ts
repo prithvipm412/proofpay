@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { usePublicClient, useReadContract } from "wagmi";
 import { monadTestnet } from "~~/utils/proofpay/chain";
 import { escrowAbi } from "~~/utils/proofpay/escrow";
 import { fetchReports } from "~~/utils/proofpay/reports";
 import { settings } from "~~/utils/proofpay/settings";
-import { isFinal, pollDelay } from "~~/utils/proofpay/taskActions";
+import { isFinal, pollDelay, reportPollDelay } from "~~/utils/proofpay/taskActions";
 
 /** F-17: independent reads keep refund/release available if the report service is down. */
 export function useTaskDetail(id: bigint | null) {
@@ -41,9 +41,15 @@ export function useTaskDetail(id: bigint | null) {
     refetchInterval: query => pollDelay(failures.task, !!query.state.data && isFinal(query.state.data.task.status)),
   });
   const task = taskQuery.data?.task;
+  const chainNow = () => {
+    const data = taskQuery.data;
+    return data ? data.timestamp + Math.floor((Date.now() - data.sampledAt) / 1000) : NaN;
+  };
   const reportsQuery = useQuery({
-    queryKey: ["proofpay-reports", settings.escrowAddress, id?.toString()],
+    // A new status or attempt on the chain gives one fresh read, even when polling has stopped.
+    queryKey: ["proofpay-reports", settings.escrowAddress, id?.toString(), task?.status, task?.attempts],
     enabled: id !== null && !!task?.attempts,
+    placeholderData: keepPreviousData,
     retry: false,
     queryFn: async ({ signal }) => {
       try {
@@ -55,7 +61,7 @@ export function useTaskDetail(id: bigint | null) {
         throw error;
       }
     },
-    refetchInterval: () => pollDelay(failures.reports, !!task && isFinal(task.status)),
+    refetchInterval: query => reportPollDelay(task, query.state.data, failures.reports, chainNow()),
   });
   const { data: arbitrationTimeout } = useReadContract({
     address: settings.escrowAddress,

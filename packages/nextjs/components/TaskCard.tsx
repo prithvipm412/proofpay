@@ -1,26 +1,34 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { Task } from "~~/hooks/proofpay/useTasks";
 import { formatMon, formatTimeLeft } from "~~/utils/proofpay/format";
-import { previewUrl } from "~~/utils/proofpay/verifier";
+import { loadPreview } from "~~/utils/proofpay/verifier";
 
 export const TaskPhoto = ({ hash, alt, className = "" }: { hash: string; alt: string; className?: string }) => {
+  const [src, setSrc] = useState<string>();
   const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let live = true;
+    setSrc(undefined);
+    setFailed(false);
+    loadPreview(hash).then(
+      url => live && setSrc(url),
+      () => live && setFailed(true),
+    );
+    return () => {
+      live = false;
+    };
+  }, [hash]);
   if (failed) {
     return <div className={`flex items-center justify-center bg-bg text-xs text-muted ${className}`}>No preview</div>;
   }
+  if (!src) return <div className={`animate-pulse bg-bg ${className}`} role="img" aria-label={`Loading: ${alt}`} />;
   return (
-    // The preview comes from the verifier (V-10); its URL is set at run time, so next/image is not used.
+    // The preview comes from the verifier (V-10) as an object URL, so next/image is not used.
     // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={previewUrl(hash)}
-      alt={alt}
-      loading="lazy"
-      className={`object-cover ${className}`}
-      onError={() => setFailed(true)}
-    />
+    <img src={src} alt={alt} className={`object-cover ${className}`} onError={() => setFailed(true)} />
   );
 };
 

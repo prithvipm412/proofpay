@@ -1,5 +1,6 @@
 import { TaskStatus as S } from "./escrow";
-import { isFinal, pollDelay, refundNote, taskActions } from "./taskActions";
+import type { Report } from "./reports";
+import { isFinal, pollDelay, refundNote, reportPollDelay, taskActions } from "./taskActions";
 import { describe, expect, it } from "vitest";
 import type { Task } from "~~/hooks/proofpay/useTasks";
 
@@ -101,5 +102,43 @@ describe("Demo step 9 refund note (C-21)", () => {
           // An Open task can always be cancelled; the note only explains expired or exhausted tasks.
           if (s !== S.Open) expect(refundNote(t, now, true) !== null).toBe(button);
         }
+  });
+});
+
+describe("Report polling with the ngrok request quota (F-17, M8)", () => {
+  const report = (jobState: string | null, attemptResult: Report["attemptResult"] = "none"): Report[] => [
+    {
+      deploymentId: "10143:0x1",
+      taskId: 1,
+      attempt: 1,
+      proofHash: "0x22",
+      jobState,
+      attemptResult,
+      evaluation: null,
+      settlement: { state: "x", txHashes: [], error: null, conflict: false },
+    },
+  ];
+  it("polls every 3 s while Submitted, with backoff, and slowly after reviewBy", () => {
+    expect(reportPollDelay(task(S.Submitted), undefined, 0, 0)).toBe(3_000);
+    expect(reportPollDelay(task(S.Submitted), undefined, 3, 0)).toBe(12_000);
+    expect(reportPollDelay(task(S.Submitted), undefined, 0, 400)).toBe(30_000);
+  });
+  it("stops once the current attempt's report is settled", () => {
+    expect(reportPollDelay(task(S.Approved), report("confirmed", "approved"), 0, 0)).toBe(false);
+    expect(reportPollDelay(task(S.Accepted), report("confirmed", "rejected"), 0, 0)).toBe(false);
+    expect(reportPollDelay(task(S.Accepted), report("model_failed"), 0, 0)).toBe(false);
+  });
+  it("keeps a slow poll while the result is still being saved or no report matches", () => {
+    expect(reportPollDelay(task(S.Approved), report("broadcast"), 0, 0)).toBe(15_000);
+    expect(reportPollDelay(task(S.Disputed), undefined, 0, 0)).toBe(15_000);
+    expect(reportPollDelay(task(S.Approved), [{ ...report("confirmed", "approved")[0], attempt: 2 }], 0, 0)).toBe(
+      15_000,
+    );
+  });
+  it("never polls without an attempt or in a final status", () => {
+    expect(reportPollDelay(undefined, undefined, 0, 0)).toBe(false);
+    expect(reportPollDelay(task(S.Open, 0), undefined, 0, 0)).toBe(false);
+    expect(reportPollDelay(task(S.Paid), undefined, 0, 0)).toBe(false);
+    expect(reportPollDelay(task(S.Refunded), report("broadcast"), 0, 0)).toBe(false);
   });
 });
