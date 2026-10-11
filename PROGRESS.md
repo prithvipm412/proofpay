@@ -62,7 +62,7 @@ Do these in this order. Commands are for macOS zsh. `~/proofpay` is the repo. Ea
 5. Demo step 8: with a third account (or B on a new task), submit the same after photo for another task: "Duplicate photo" must show and the MON stays locked. Demo step 9: refund a task after its time limit.
 6. Check that every screen fits the phone width with no sideways scrolling. Tell the agent any problem.
 
-**G. M9 (owner parts)**: timed practice recording (3 min, `docs/demo-script.md`), demo video, pitch video (`docs/pitch.md`), upload the logo (`docs/logo.svg`), section 15 review with the agent, then submit (M10 checklist, README section 14.2).
+**G. M9 (owner parts)**: timed practice recording (3 min, `docs/demo-script.md`), demo video, pitch video (`docs/pitch.md`), upload the logo (`docs/brand/logo.png`, 512 x 512) and the cover image (`docs/brand/cover.png`, 1200 x 630; SVG sources next to them), section 15 review with the agent, then submit (M10 checklist, README section 14.2).
 
 ## External checks (M0)
 - Cutoff time and time zone: 14 Oct 2026, 03:59 UTC (= 13 Oct 11:59 PM US Eastern, 14 Oct 09:29 IST). Source (2026-10-04): owner, quoting other teams who quoted the rules. NOT yet confirmed by the owner on the hackathon dashboard. Owner target stays 13 Oct before 12:00 IST.

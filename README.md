@@ -1,3 +1,5 @@
+<img src="docs/brand/logo.svg" width="88" alt="ProofPay logo" align="right">
+
 # ProofPay
 
 **Centralized escrow with automated visual checks and duplicate-evidence detection, on Monad testnet.**

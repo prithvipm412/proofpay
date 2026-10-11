@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="ProofPay logo">
+  <title>ProofPay</title>
+  <rect width="512" height="512" rx="104" fill="#0B1426"/>
+  <!-- photo frame -->
+  <rect x="96" y="132" width="320" height="248" rx="36" fill="#111C33" stroke="#3B82F6" stroke-width="22"/>
+  <!-- camera bump -->
+  <rect x="196" y="104" width="120" height="44" rx="16" fill="#3B82F6"/>
+  <!-- check mark -->
+  <path d="M176 258 l56 56 l108 -116" fill="none" stroke="#93C5FD" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
