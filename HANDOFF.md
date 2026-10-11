@@ -6,7 +6,7 @@ Rules: `AGENTS.md` (= `CLAUDE.md`). Full log: `PROGRESS.md`. Owner target: submi
 
 - M0–M4: DONE. Contract deployed and verified: `10143:0x0f8ae1306c78fcf7bf998f8b8ee88add1bd7a0cf`.
 - M5: IN PROGRESS. Frontend part (F-01..F-09, F-12, F-20..F-23) is done and checked by the owner (task #2 from the browser). Calibration is not closed.
-- M6: the owner said to start it in parallel with M5 (2026-10-11). No M6 code is written yet. The agent only read the code.
+- M6: the owner said to start it in parallel with M5 (2026-10-11). Code for F-10, F-11, F-13..F-19 is written and committed (Codex, then reviewed by Claude Code). Open: the owner's two-account browser run of demo steps 1 to 7 on testnet, the closed-browser check, and the phone test (360 px, camera, MPO).
 
 ## Left in M5
 
@@ -17,7 +17,7 @@ Rules: `AGENTS.md` (= `CLAUDE.md`). Full log: `PROGRESS.md`. Owner target: submi
 
 ## Left in M6
 
-F-10 (full task detail), F-11 (My tasks), F-13 (submit proof with camera), F-14 (role buttons), F-15 (job state messages), F-16/F-16a, F-17 (poll every 3 s, back off on error), F-18 (sentence for each C-25 error; `utils/proofpay/txErrors.ts` now shows only the error name), F-19, and the test on the owner's phone (360 px, camera, MPO check).
+Owner tests only: demo steps 1 to 7 with two email accounts on testnet; close the browser after submitProof and confirm the check still finishes; the phone test (360 px, camera upload, MPO conversion). The live verifier MUST be caught up (`ready: true`) first.
 Existing code to build on: `app/tasks/[id]/page.tsx` (first version), `hooks/proofpay/useEscrowTx.ts` (send one call), `hooks/proofpay/useTasks.ts`, `utils/proofpay/verifier.ts` (upload), `components/WithdrawBanner.tsx` (F-06 is already done).
 Verifier report endpoints: `GET /tasks/{id}/attempts` and `GET /tasks/{id}/attempts/{n}` (V-22 format, `verifier/app/jobs.py` `build_report`). `POST /verify {"taskId": n}`.
 
@@ -49,7 +49,7 @@ cd verifier && .venv/bin/python scripts/calibrate.py --near-hard 4 --near-warn 1
 
 ## Known issues
 
-- The verifier is STOPPED and far behind. Checkpoint 68,483,075; chain 70,028,849 (2026-10-11), about 1.55 M blocks. At about 112 blocks/s the catch-up takes about 4 h, and `ready` stays false (V-R7) until it ends. Task #2 has no claim yet. Each batch is 1 `get_logs` + 1 `get_block`, and the latency limits the speed (`verifier/app/events.py` `scan_once`). Option (b) "parallel getLogs within 50 rps" is DECIDED but not written. Plan: fetch about 8 batches at the same time with a rate cap of about 25 rps, then save them in block order, one transaction per batch with its checkpoint (V-E2, V-T15 MUST still pass). Then start the verifier and let it catch up before the M6 browser test.
+- Verifier catch-up: option (b) parallel fetches is written (commit afef315, about 500 to 600 blocks/s). A live verifier started inside an agent session stops when that session ends; the checkpoint is kept, so the next start continues from it. For long runs, the owner starts it in an own terminal. Check `ready` with /health before a browser test.
 - Phone MPO photos: handle at M6 (F-13 converts to JPEG IF the phone gives MPO).
 - The cutoff time is not confirmed on the dashboard. The model lifetime check is due before M8 (see PROGRESS Open problems).
 
