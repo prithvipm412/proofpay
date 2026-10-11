@@ -1,5 +1,24 @@
 # ProofPay progress
 
+## Morning summary (2026-10-12, overnight session, 00:50–03:45 IST)
+
+**Where things stand:** M7 and M8 code is done and pushed. Everything left needs you: the list is "Needs owner" just below (A to G, in order; about 2.5 h including two 1-hour waits that need no attention). Live verifier (port 8000, `ready: true`) and `yarn start` (port 3000) are running in the agent session.
+
+**Done overnight**
+- M7: local trust test 9/9 PASS (release, dispute -> resolve both ways, dispute -> expire, refunds, crash recovery after evaluated/signed/broadcast, reuse blocked after restarts). One-command testnet runner `verifier/scripts/trust_testnet.py` (rehearsed on anvil 9/9). Frontend: red "Duplicate photo" notice for demo step 8, refund reason for demo step 9.
+- M8: backup + readonly restore (V-B1/V-B2/V-T16); real backup at 02:27 and a real restore check: RESTORE CHECK OK. Full README. Vercel deploy helper, CORS helper, `blocked_nonce` recovery tool.
+- M9 prep: `docs/demo-script.md`, `docs/pitch.md`, logo and cover (`docs/brand/`), `docs/release-gate.md` (15.1 evidence; only the testnet parts are open).
+- M5: `docs/calibration.md` written as a proposal: keep 4/10, close with 21 pairs (V-C11 PASS).
+- Tests: forge 67, verifier 337, frontend 92, all pass; production `next build` passes.
+
+**Found and fixed (please read)**
+1. The Gemma model sometimes writes a `<thought>…</thought>` block before its JSON, and always for the same photos, so those jobs could only end in "Could not check". The parser now drops one leading thought block; prompt-injection cases were rerun with 0 wrong verdicts (docs/model-eval.md).
+2. ngrok free plan: its warning page can replace API answers and photos, and it allows 20,000 requests per month. The frontend now sends the skip header, loads previews through it, and polls the verifier only while a check runs.
+3. Vercel: building `packages/nextjs` on its own failed (Yarn Plug'n'Play). Fixed with `packages/nextjs/.yarnrc.yml`; the isolated build now passes.
+4. Privy: once you add the Vercel domain, also add `http://localhost:3000`, or local login stops working.
+
+**Decisions to review:** PROGRESS "Decisions", all entries dated 2026-10-12 (the F-17 polling change for the ngrok quota is the only change to a written requirement).
+
 ## Milestones
 | ID | Goal | Day | Status | Date done |
 | --- | --- | --- | --- | --- |
