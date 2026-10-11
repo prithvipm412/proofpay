@@ -49,9 +49,12 @@ export const ReportCard = ({ report, reviewBy }: { report: Report; reviewBy: big
       {report.evaluation ? (
         <>
           <p className="text-sm">{report.evaluation.reason}</p>
-          <p className="text-xs text-muted">
-            Confidence: {report.evaluation.score}/100. This is confidence in the decision, not work quality.
-          </p>
+          {report.evaluation.checks.some(c => c.id === "V-C7" && c.result !== "skipped") && (
+            // V-20: the score is the model's confidence; without a model result it is 0 and means nothing.
+            <p className="text-xs text-muted">
+              Confidence: {report.evaluation.score}/100. This is confidence in the decision, not work quality.
+            </p>
+          )}
           {report.attemptResult === "none" && (
             <p className="text-sm text-warn">These checks are not a recorded approval. The payment remains locked.</p>
           )}
