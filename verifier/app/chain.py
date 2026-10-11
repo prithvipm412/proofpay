@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import json
 import pathlib
+import threading
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -29,6 +31,39 @@ READ_EVENTS = ("TaskCreated", "TaskAccepted", "ProofSubmitted", "VerdictRecorded
 RPC_TIMEOUT_S = 10
 GAS_MARGIN_PCT = 125  # gas limit = estimate x 1.25 (Monad charges the limit; a revert by out-of-gas is worse)
 DEFAULT_PRIORITY_WEI = 2 * 10**9
+RPC_REQUESTS_PER_SECOND = 25  # leave headroom below the public testnet RPC's 50 rps
+
+
+class RpcPacer:
+    """Space request starts across all threads using this Chain, without bursts."""
+
+    def __init__(self, clock=time.monotonic, sleep=time.sleep):
+        self.clock, self.sleep = clock, sleep
+        self.lock = threading.Lock()
+        self.next_start = 0.0
+
+    def wait(self):
+        with self.lock:
+            delay = self.next_start - self.clock()
+            if delay > 0:
+                self.sleep(delay)
+            self.next_start = self.clock() + 1 / RPC_REQUESTS_PER_SECOND
+
+
+class PacedHTTPProvider(Web3.HTTPProvider):
+    """One rate cap for event fetches, health reads and the worker's RPC calls.
+
+    Disable hidden provider retries: event fetch retries pass through this cap again.
+    Other callers already reconcile/retry in their loops. No RPC batch calls are used.
+    """
+
+    def __init__(self, rpc_url):
+        super().__init__(rpc_url, request_kwargs={"timeout": RPC_TIMEOUT_S}, exception_retry_configuration=None)
+        self.pacer = RpcPacer()
+
+    def make_request(self, method, params):
+        self.pacer.wait()
+        return super().make_request(method, params)
 
 
 class ReadonlyError(Exception):
@@ -92,7 +127,7 @@ class Chain:
 
     def __init__(self, rpc_url: str, escrow_address: str, can_sign: bool = False):
         self.can_sign = can_sign
-        self.w3 = Web3(Web3.HTTPProvider(rpc_url, request_kwargs={"timeout": RPC_TIMEOUT_S}))
+        self.w3 = Web3(PacedHTTPProvider(rpc_url))
         self.abi = load_abi()
         self.address = Web3.to_checksum_address(escrow_address)
         self.contract = self.w3.eth.contract(address=self.address, abi=self.abi)

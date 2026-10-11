@@ -106,7 +106,7 @@ def test_VE1_scan_stops_at_safe_head(reader, chain, storage):
 def test_VE2_batches_are_at_most_100_blocks_and_contiguous(reader, chain):
     chain.mine(350)
     scan_all(reader)
-    calls = chain.calls_events
+    calls = sorted(chain.calls_events)  # fetch completion/order is concurrent; ranges remain contiguous
     assert calls[0][0] == START_BLOCK
     assert all(end - start + 1 <= 100 for start, end in calls)
     assert all(calls[i + 1][0] == calls[i][1] + 1 for i in range(len(calls) - 1))
@@ -356,3 +356,136 @@ def test_run_loop_catches_up_without_pause_and_stops(reader, chain, storage):
     assert elapsed < 2.5  # no 3 s pause between the two scans
     assert (1, 0, "before") in claims(storage)
     assert reader.heartbeat is not None
+
+
+def test_VT15_parallel_fetch_saves_in_order(reader, chain, storage, monkeypatch):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    chain.create_task(1, H1)
+    chain.mine(200)
+    chain.submit_proof(1, 1, H2)
+    chain.mine(200)
+    chain.verdict(1, 1, H2, passed=True)
+    original = chain.events
+    later_finished = threading.Event()
+    release_first = threading.Event()
+    completed, saved = [], []
+    original_save = reader.save_batch
+
+    def fetch(start, end):
+        if start == START_BLOCK:
+            assert release_first.wait(3)
+        result = original(start, end)
+        completed.append(start)
+        if start > START_BLOCK:
+            later_finished.set()
+        return result
+
+    def save(cp, events, block):
+        saved.append(cp + 1)
+        original_save(cp, events, block)
+
+    monkeypatch.setattr(chain, "events", fetch)
+    monkeypatch.setattr(reader, "save_batch", save)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(reader.scan_once)
+        try:
+            assert later_finished.wait(2), "fetches must overlap"
+            assert storage.meta()["checkpointBlock"] == str(START_BLOCK - 1)
+            assert claims(storage) == {}
+        finally:
+            release_first.set()
+        future.result(timeout=3)
+    assert completed[0] != START_BLOCK
+    assert saved == sorted(completed)
+    assert claims(storage)[(1, 1, "after")] == (H2, "accepted")
+
+
+def test_VT15_failed_middle_range_never_skipped_on_restart(reader, chain, storage, settings, monkeypatch):
+    import app.events as events_module
+
+    monkeypatch.setattr(events_module, "RETRY_DELAY_S", 0)
+    chain.mine(500)
+    chain.create_task(1, H1)
+    chain.fail_events_at = START_BLOCK + 100
+    with pytest.raises(ConnectionError):
+        reader.scan_once()
+    assert int(storage.meta()["checkpointBlock"]) == START_BLOCK + 99
+    assert claims(storage) == {}
+    assert sum(start == START_BLOCK + 100 for start, _ in chain.calls_events) == 3
+    chain.fail_events_at = None
+    restarted = EventReader(settings, storage, chain)
+    restarted.startup()
+    scan_all(restarted)
+    assert claims(storage)[(1, 0, "before")] == (H1, "history")
+    assert int(storage.meta()["checkpointBlock"]) == chain.block("finalized").number
+
+
+def test_VE2_retries_transient_block_fetch(reader, chain, storage, monkeypatch):
+    import app.events as events_module
+
+    monkeypatch.setattr(events_module, "RETRY_DELAY_S", 0)
+    chain.mine(200)
+    original = chain.block
+    calls = []
+
+    def block(ident):
+        if ident == START_BLOCK + 99:
+            calls.append(ident)
+            if len(calls) == 1:
+                raise TimeoutError("timeout")
+        return original(ident)
+
+    monkeypatch.setattr(chain, "block", block)
+    scan_all(reader)
+    assert len(calls) == 2
+    assert reader.caught_up()
+
+
+def test_VE2_stop_during_fetch_keeps_checkpoint(reader, chain, storage, monkeypatch):
+    original = chain.events
+    before = storage.meta()["checkpointBlock"]
+
+    def fetch(start, end):
+        reader.stop()
+        return original(start, end)
+
+    monkeypatch.setattr(chain, "events", fetch)
+    assert reader.scan_once() == 0
+    assert storage.meta()["checkpointBlock"] == before
+
+
+def test_VE2_pacer_shared_by_concurrent_rpc_calls(monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from app.chain import PacedHTTPProvider, RpcPacer
+
+    clock = [0.0]
+    starts = []
+    def sleep(seconds):
+        clock[0] += seconds
+    pacer = RpcPacer(clock=lambda: clock[0], sleep=sleep)
+    provider = PacedHTTPProvider("http://127.0.0.1:8545")
+    provider.pacer = pacer
+    assert provider.exception_retry_configuration is None
+    def request(self, method, params):
+        starts.append(clock[0])
+        return {"jsonrpc": "2.0", "id": 1, "result": "0x1"}
+    monkeypatch.setattr(Web3.HTTPProvider, "make_request", request)
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(lambda n: provider.make_request("eth_getLogs" if n % 2 else "eth_getBlockByNumber", []), range(50)))
+    assert len(starts) == 50
+    assert clock[0] >= 49 / 25 - 1e-8
+    assert all(b - a >= 1 / 25 - 1e-8 for a, b in zip(starts, starts[1:]))
+
+
+@pytest.mark.parametrize("status,expected", [(429, True), (503, True), (400, False), (401, False)])
+def test_VE2_retry_http_policy(status, expected):
+    from requests import Response
+    from requests.exceptions import HTTPError
+    from app.events import retryable
+
+    response = Response()
+    response.status_code = status
+    assert retryable(HTTPError(response=response)) is expected
+    assert not retryable(ValueError("invalid response"))

@@ -10,6 +10,8 @@ Built for the Monad Metropolis hackathon (track: Trust, Identity & AI Infrastruc
 - **Photos go to Google.** The AI check sends the before and after photos to the Google Gemini API free tier. Under Google's terms for unpaid services, Google can use this content to improve its products, and human reviewers can read it. Use demo photos with no faces and no private places.
 - **The live demo depends on one Mac.** The verifier runs on the developer's Mac and is reachable through an ngrok URL. The live demo works only while that Mac runs the verifier.
 
+Remaining timeline and report animations (F-22) are deferred for the hackathon; colors and layout stay in scope.
+
 ## Credits
 
 This repository starts from the [scaffold-monad-foundry](https://github.com/monad-developers/scaffold-monad-foundry) template

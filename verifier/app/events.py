@@ -12,7 +12,11 @@ import logging
 import sqlite3
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 from typing import Callable
+
+from requests.exceptions import ConnectionError as RequestsConnectionError, HTTPError, Timeout
+from web3.exceptions import Web3RPCError
 
 from .chain import Block, ChainEvent
 from .config import EVENT_BATCH_BLOCKS, Settings
@@ -25,6 +29,24 @@ SCAN_INTERVAL_S = 3.0  # V-E2
 MAX_LAG_S = 30  # V-R7
 MAX_BATCHES_PER_SCAN = 50  # keeps the heartbeat fresh during a long rebuild
 CLEANUP_INTERVAL_S = 600  # V-S8
+FETCH_WORKERS = 8
+FETCH_ATTEMPTS = 3
+RETRY_DELAY_S = 0.5
+
+
+class ScanStopped(Exception):
+    """Stop fetching without moving the checkpoint past unsaved work."""
+
+
+def retryable(exc: Exception) -> bool:
+    if isinstance(exc, (ConnectionError, TimeoutError, RequestsConnectionError, Timeout)):
+        return True
+    if isinstance(exc, HTTPError):
+        return exc.response is not None and (exc.response.status_code == 429 or exc.response.status_code >= 500)
+    if isinstance(exc, Web3RPCError):
+        message = str(exc).lower()
+        return any(word in message for word in ("rate limit", "too many requests", "timeout", "temporarily unavailable"))
+    return False
 
 # Admission hook (V-A). Called inside the batch transaction for a new job. Returns (job state, reason).
 Admit = Callable[[sqlite3.Connection, ChainEvent], tuple[str, str | None]]
@@ -83,21 +105,64 @@ class EventReader:
 
     # ------------------------------------------------------------ scanning (V-E2)
 
+    def _read(self, fn, *args):
+        for attempt in range(FETCH_ATTEMPTS):
+            if self._stop.is_set():
+                raise ScanStopped()
+            try:
+                return fn(*args)
+            except Exception as exc:
+                if not retryable(exc) or attempt == FETCH_ATTEMPTS - 1:
+                    raise
+                if self._stop.wait(RETRY_DELAY_S * 2**attempt):
+                    raise ScanStopped() from None
+
+    def _fetch(self, start: int, end: int, safe: Block):
+        events = self._read(self.chain.events, start, end)
+        end_block = safe if end == safe.number else self._read(self.chain.block, end)
+        return events, end_block
+
     def scan_once(self) -> int:
         """Scan up to the safe head. Returns the number of batches saved."""
         safe = self.chain.safe_head(self.settings.safe_head_method, self.settings.safe_head_offset)
         self.safe_head = safe
         batches = 0
-        while not self._stop.is_set() and batches < MAX_BATCHES_PER_SCAN:
-            cp = int(self.storage.meta()["checkpointBlock"])
-            if cp >= safe.number:
-                break
-            start, end = cp + 1, min(safe.number, cp + EVENT_BATCH_BLOCKS)
-            events = self.chain.events(start, end)
-            end_block = safe if end == safe.number else self.chain.block(end)
-            self.save_batch(cp, events, end_block)
-            batches += 1
-            self.heartbeat = time.monotonic()
+        # Bounded prefetch: at most eight ranges in memory. Only this thread writes.
+        with ThreadPoolExecutor(max_workers=FETCH_WORKERS, thread_name_prefix="event-fetch") as pool:
+            pending = []
+            try:
+                while not self._stop.is_set() and batches < MAX_BATCHES_PER_SCAN:
+                    cp = int(self.storage.meta()["checkpointBlock"])
+                    if cp >= safe.number:
+                        break
+                    pending = []
+                    for _ in range(min(FETCH_WORKERS, MAX_BATCHES_PER_SCAN - batches)):
+                        if cp >= safe.number:
+                            break
+                        end = min(safe.number, cp + EVENT_BATCH_BLOCKS)
+                        pending.append((cp, pool.submit(self._fetch, cp + 1, end, safe)))
+                        cp = end
+                    for expected_cp, future in pending:
+                        while True:
+                            if self._stop.is_set():
+                                raise ScanStopped()
+                            self.heartbeat = time.monotonic()
+                            try:
+                                events, end_block = future.result(timeout=0.5)
+                                break
+                            except FutureTimeout:
+                                if future.done():  # a fetch itself raised TimeoutError
+                                    raise
+                        if self._stop.is_set():
+                            raise ScanStopped()
+                        self.save_batch(expected_cp, events, end_block)
+                        batches += 1
+                        self.heartbeat = time.monotonic()
+            except ScanStopped:
+                return batches
+            finally:
+                for _, future in pending:
+                    future.cancel()
         meta = self.storage.meta()
         if int(meta["checkpointBlock"]) >= safe.number and meta.get("historyStatus") != "complete":
             with self.storage.tx() as c:

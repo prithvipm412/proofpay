@@ -768,7 +768,7 @@ Use small fixture images. Mock the chain and the model in unit tests.
 
 - F-20 Colors: background `#0B1426`, cards `#111C33`, borders `#1E2A47`, text `#E6EDF7`, muted text `#8A9BB8`, action blue `#3B82F6`, pass teal `#14B8A6`, warning amber `#F59E0B`, fail red `#EF4444`.
 - F-21 Type and shape: font Inter, card radius 12 px, large spacing.
-- F-22 Motion (200–300 ms, ease-out): cards fade and move up a small distance when they appear; the status timeline line fills from left to right; the report card shows each check one at a time, 150 ms apart.
+- F-22 (owner, 2026-10-11): Defer remaining motion details. Keep the existing card motion, colors and layout. Do not require timeline animation or staggered report checks for M6/M7 completion.
 - F-23 Mobile first: all screens work at 360 px width. Test on the owner's phone at M6.
 
 ## 12. Milestones
@@ -873,7 +873,7 @@ Tasks:
 1. Make demo steps 8 and 9 work and look clear.
 2. Make dispute, `resolveDispute` (arbiter uses a `cast` command in the README; no admin screen), `expireDispute`, refund and withdraw work in the frontend.
 3. Recovery test on testnet: stop the verifier during a job (once in `evaluated`, once after `signed`, once after `broadcast`). Start it again each time. Show that the job reaches `confirmed` with one transaction. (V-T7 covers the other states.)
-4. Add the motion from F-22.
+4. Keep the existing visual style; remaining F-22 motion is deferred by the owner (2026-10-11).
 
 Done when:
 - Demo steps 8 and 9 work on Monad testnet.
