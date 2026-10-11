@@ -1,13 +1,14 @@
 """Local end-to-end test on anvil (M4 task 3). No real model, no testnet, no secrets.
 
 Usage (from the verifier/ folder):
-    .venv/bin/python scripts/e2e_local.py
+    .venv/bin/python scripts/e2e_local.py              # verifier on port 8000
+    .venv/bin/python scripts/e2e_local.py --port 8001  # while the live testnet verifier uses 8000
 
 What it does:
   1. Starts anvil on http://127.0.0.1:8545 (chain 31337, one block each second).
   2. Builds and deploys ProofPayEscrow with the demo settings (60 / 300 / 3600).
   3. Starts a fake OpenAI-compatible model server on 127.0.0.1 (it always answers "task complete").
-  4. Starts the verifier in live mode on port 8000 with a temporary data folder.
+  4. Starts the verifier in live mode on port 8000 (or --port) with a temporary data folder.
   5. Good pair: upload two fixture photos, create a task, accept, submit, wait for the verdict -> pass.
   6. Reuse: a second task gets the SAME after photo as proof -> V-C2 fail, the MON stays locked.
 It prints PASS or FAIL for each case and stops every process it started.
@@ -18,6 +19,7 @@ http://127.0.0.1:8545 and stops IF the chain ID is not 31337.
 
 from __future__ import annotations
 
+import argparse
 import http.server
 import json
 import pathlib
@@ -157,11 +159,76 @@ class Local:
 # ---------------------------------------------------------------- verifier helpers
 
 
-def upload(name: str) -> str:
-    with open(FIXTURES / name, "rb") as f:
-        r = httpx.post(f"{VERIFIER_URL}/upload", files={"file": (name, f, "image/jpeg")}, timeout=30)
+def set_port(port: int) -> None:
+    global VERIFIER_PORT, VERIFIER_URL
+    VERIFIER_PORT, VERIFIER_URL = port, f"http://127.0.0.1:{port}"
+
+
+def upload(name: str | pathlib.Path) -> str:
+    path = pathlib.Path(name) if pathlib.Path(name).is_absolute() else FIXTURES / name
+    with open(path, "rb") as f:
+        r = httpx.post(f"{VERIFIER_URL}/upload", files={"file": (path.name, f, "image/jpeg")}, timeout=30)
     r.raise_for_status()
     return r.json()["sha256"]
+
+
+def verifier_env(address: str, block: int, model_url: str, data_root: pathlib.Path, **extra: str) -> dict:
+    """Settings of a local live verifier (anvil keys only; section 4 exception)."""
+    env = {
+        "PATH": "/usr/bin:/bin",
+        "CHAIN_ID": str(LOCAL_CHAIN_ID),
+        "MONAD_RPC_URL": RPC,
+        "ESCROW_ADDRESS": address,
+        "START_BLOCK": str(block),
+        "VERIFIER_PRIVATE_KEY": ANVIL_KEYS["verifier"],
+        "VISION_API_KEY": "fake",
+        "VISION_BASE_URL": model_url,
+        "VISION_MODEL": "fake-model",
+        "VISION_REASONING_EFFORT": "",
+        "CORS_ORIGINS": "http://localhost:3000",
+        "DATA_ROOT": str(data_root),
+        "MIN_CONFIDENCE": "70",
+        "NEAR_HARD": "4",
+        "NEAR_WARN": "10",
+        "VERIFIER_MODE": "live",
+        "ADMISSION_MODE": "open",
+        "ALLOWLIST": "",
+        "MAX_JOBS_PER_POSTER": "10",
+        "MAX_JOBS_PER_WORKER": "10",
+        "MAX_JOBS_PER_DAY": "150",
+        "MAX_MODEL_CALLS_PER_DAY": "300",
+        "MAX_VERDICT_TX_PER_DAY": "150",
+        "MAX_QUEUE": "50",
+        "MIN_SIGNER_BALANCE": "0.05",
+        "MAX_STORAGE_MB": "2000",
+        "ADMISSION_UNTIL": "2099-01-01T00:00:00Z",
+        "SAFE_HEAD_METHOD": "finalized",
+        "CRASH_AFTER_STATE": "",
+    }
+    env.update(extra)
+    return env
+
+
+def start_verifier(env: dict, log_path: pathlib.Path) -> subprocess.Popen:
+    log = open(log_path, "a")
+    return subprocess.Popen(
+        [sys.executable, "-m", "app.main", "--port", str(VERIFIER_PORT)],
+        cwd=VERIFIER_DIR, env=env, stdout=log, stderr=subprocess.STDOUT,
+    )
+
+
+def wait_ready(timeout: float = 90) -> None:
+    wait_for(lambda: httpx.get(f"{VERIFIER_URL}/health", timeout=5).json()["ready"], timeout, "verifier ready")
+
+
+def start_anvil(tmp: pathlib.Path) -> subprocess.Popen:
+    anvil_log = open(tmp / "anvil.log", "w")
+    proc = subprocess.Popen(
+        ["anvil", "--port", "8545", "--block-time", "1", "--slots-in-an-epoch", "1"],
+        stdout=anvil_log, stderr=subprocess.STDOUT,
+    )
+    wait_for(lambda: Web3(Web3.HTTPProvider(RPC)).is_connected(), 30, "anvil")
+    return proc
 
 
 def wait_report(task_id: int, attempt: int) -> dict:
@@ -199,6 +266,9 @@ def show(report: dict) -> None:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description="ProofPay local end-to-end test on anvil")
+    parser.add_argument("--port", type=int, default=VERIFIER_PORT, help="verifier port (default 8000)")
+    set_port(parser.parse_args().port)
     for port, what in ((8545, "anvil"), (VERIFIER_PORT, "the verifier")):
         if not port_free(port):
             print(f"Port {port} is in use. Stop the running {what} first (section 3.1: one of each).")
@@ -212,12 +282,7 @@ def main() -> int:
         subprocess.run(["forge", "build"], cwd=FOUNDRY, check=True, capture_output=True)
 
         print("2. Start anvil (chain 31337)")
-        anvil_log = open(tmp / "anvil.log", "w")
-        procs.append(subprocess.Popen(
-            ["anvil", "--port", "8545", "--block-time", "1", "--slots-in-an-epoch", "1"],
-            stdout=anvil_log, stderr=subprocess.STDOUT,
-        ))
-        wait_for(lambda: Web3(Web3.HTTPProvider(RPC)).is_connected(), 30, "anvil")
+        procs.append(start_anvil(tmp))
         chain = Local()
 
         print("3. Deploy ProofPayEscrow (60 / 300 / 3600)")
@@ -229,43 +294,10 @@ def main() -> int:
         threading.Thread(target=server.serve_forever, daemon=True).start()
         model_url = f"http://127.0.0.1:{server.server_address[1]}/v1"
 
-        print("5. Start the verifier (live, temporary data folder)")
-        env = {
-            "PATH": "/usr/bin:/bin",
-            "CHAIN_ID": str(LOCAL_CHAIN_ID),
-            "MONAD_RPC_URL": RPC,
-            "ESCROW_ADDRESS": address,
-            "START_BLOCK": str(block),
-            "VERIFIER_PRIVATE_KEY": ANVIL_KEYS["verifier"],
-            "VISION_API_KEY": "fake",
-            "VISION_BASE_URL": model_url,
-            "VISION_MODEL": "fake-model",
-            "VISION_REASONING_EFFORT": "",
-            "CORS_ORIGINS": "http://localhost:3000",
-            "DATA_ROOT": str(tmp / "data"),
-            "MIN_CONFIDENCE": "70",
-            "NEAR_HARD": "4",
-            "NEAR_WARN": "10",
-            "VERIFIER_MODE": "live",
-            "ADMISSION_MODE": "open",
-            "ALLOWLIST": "",
-            "MAX_JOBS_PER_POSTER": "10",
-            "MAX_JOBS_PER_WORKER": "10",
-            "MAX_JOBS_PER_DAY": "150",
-            "MAX_MODEL_CALLS_PER_DAY": "300",
-            "MAX_VERDICT_TX_PER_DAY": "150",
-            "MAX_QUEUE": "50",
-            "MIN_SIGNER_BALANCE": "0.05",
-            "MAX_STORAGE_MB": "2000",
-            "ADMISSION_UNTIL": "2099-01-01T00:00:00Z",
-            "SAFE_HEAD_METHOD": "finalized",
-        }
-        vlog = open(tmp / "verifier.log", "w")
-        procs.append(subprocess.Popen(
-            [sys.executable, "-m", "app.main", "--port", str(VERIFIER_PORT)],
-            cwd=VERIFIER_DIR, env=env, stdout=vlog, stderr=subprocess.STDOUT,
-        ))
-        wait_for(lambda: httpx.get(f"{VERIFIER_URL}/health", timeout=5).json()["ready"], 90, "verifier ready")
+        print(f"5. Start the verifier (live, temporary data folder, port {VERIFIER_PORT})")
+        env = verifier_env(address, block, model_url, tmp / "data")
+        procs.append(start_verifier(env, tmp / "verifier.log"))
+        wait_ready()
         print("   /health ready: true")
 
         print("6. Good pair: task 1 (a_before -> a_after)")
