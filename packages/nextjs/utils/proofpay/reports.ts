@@ -148,3 +148,15 @@ export async function requestVerification(id: bigint): Promise<void> {
   if (!response.ok)
     throw new Error("The check could not be nudged. Your proof is saved; checking will start automatically.");
 }
+
+export type DuplicateMatch = { kind: "exact" | "near"; taskId: number };
+
+/** Demo step 8 (V-C2, V-C3, V-C9): the task whose accepted proof matched this photo, IF a reuse check failed. */
+export function duplicateOf(report: Report): DuplicateMatch | null {
+  for (const check of report.evaluation?.checks ?? []) {
+    if (check.result !== "fail" || (check.id !== "V-C2" && check.id !== "V-C3")) continue;
+    const match = /accepted proof of task #(\d{1,15})\b/.exec(check.detail);
+    if (match) return { kind: check.id === "V-C2" ? "exact" : "near", taskId: Number(match[1]) };
+  }
+  return null;
+}

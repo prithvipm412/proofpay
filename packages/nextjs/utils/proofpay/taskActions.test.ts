@@ -1,5 +1,5 @@
 import { TaskStatus as S } from "./escrow";
-import { isFinal, pollDelay, taskActions } from "./taskActions";
+import { isFinal, pollDelay, refundNote, taskActions } from "./taskActions";
 import { describe, expect, it } from "vitest";
 import type { Task } from "~~/hooks/proofpay/useTasks";
 
@@ -66,5 +66,40 @@ describe("F-14 role and deadline boundaries", () => {
   it("F-17 backs off 3/6/12/24 seconds, resets after success, and stops at final", () => {
     expect([0, 1, 2, 3, 4, 5].map(n => pollDelay(n))).toEqual([3000, 3000, 6000, 12000, 24000, 24000]);
     expect(pollDelay(0, true)).toBe(false);
+  });
+});
+
+describe("Demo step 9 refund note (C-21)", () => {
+  it("explains an expired Open or Accepted task", () => {
+    expect(refundNote(task(S.Accepted), 99, true)).toBeNull();
+    expect(refundNote(task(S.Accepted), 100, true)).toBe(
+      "The time to send proof has ended. You can take your MON back with Refund.",
+    );
+    expect(refundNote(task(S.Open, 0), 100, false)).toBe(
+      "The time to send proof has ended. The poster can take the MON back.",
+    );
+  });
+  it("explains three used attempts before submitBy", () => {
+    expect(refundNote(task(S.Accepted, 3), 0, true)).toBe(
+      "All 3 attempts were used without an approval. You can take your MON back with Refund.",
+    );
+  });
+  it("explains a Submitted task only at or after reviewBy", () => {
+    expect(refundNote(task(S.Submitted), 399, true)).toBeNull();
+    expect(refundNote(task(S.Submitted), 400, true)).toContain("review time has ended");
+  });
+  it("gives no note when no refund rule applies", () => {
+    for (const s of [S.Approved, S.Disputed, S.Paid, S.Refunded]) expect(refundNote(task(s), 10_000, true)).toBeNull();
+    expect(refundNote(task(S.Accepted), NaN, true)).toBeNull();
+  });
+  it("matches the refund button rule for the poster", () => {
+    for (const s of [S.Open, S.Accepted, S.Submitted])
+      for (const now of [0, 99, 100, 399, 400])
+        for (const attempts of [0, 1, 3]) {
+          const t = task(s, attempts);
+          const button = taskActions(t, poster, now).includes("refund");
+          // An Open task can always be cancelled; the note only explains expired or exhausted tasks.
+          if (s !== S.Open) expect(refundNote(t, now, true) !== null).toBe(button);
+        }
   });
 });

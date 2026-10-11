@@ -1,4 +1,4 @@
-import { Report, currentReport, jobMessage, parseReports } from "./reports";
+import { Check, Report, currentReport, duplicateOf, jobMessage, parseReports } from "./reports";
 import { describe, expect, it } from "vitest";
 
 const deployment = "10143:0x123";
@@ -64,5 +64,44 @@ describe("F-16 report evidence binding", () => {
     for (const state of states) {
       expect(jobMessage(state, 400n)).not.toMatch(/unknown|payment released|transaction|gas|hash/i);
     }
+  });
+});
+
+describe("Demo step 8 duplicate evidence (V-C2, V-C3)", () => {
+  const withChecks = (checks: Check[]): Report =>
+    ({
+      ...report,
+      attemptResult: "rejected",
+      evaluation: { pass: false, score: 0, reason: "x", model: "m", configVersion: "0x1", checks },
+    }) as Report;
+  it("names the task of an exact match", () => {
+    const r = withChecks([
+      { id: "V-C1", name: "Integrity", result: "pass", detail: "" },
+      { id: "V-C2", name: "Exact reuse", result: "fail", detail: "Same file as the accepted proof of task #12" },
+    ]);
+    expect(duplicateOf(r)).toEqual({ kind: "exact", taskId: 12 });
+  });
+  it("names the task of a near match", () => {
+    const r = withChecks([
+      { id: "V-C2", name: "Exact reuse", result: "pass", detail: "" },
+      { id: "V-C3", name: "Near reuse", result: "fail", detail: "distance 2 to the accepted proof of task #3" },
+    ]);
+    expect(duplicateOf(r)).toEqual({ kind: "near", taskId: 3 });
+  });
+  it("ignores warnings, soft checks and missing evaluations", () => {
+    expect(duplicateOf(report)).toBeNull();
+    expect(
+      duplicateOf(
+        withChecks([
+          { id: "V-C3", name: "Near reuse", result: "warn", detail: "distance 8 to the accepted proof of task #3" },
+          { id: "V-C4", name: "Seen elsewhere", result: "warn", detail: "Same file as the before photo of task #4" },
+        ]),
+      ),
+    ).toBeNull();
+    expect(
+      duplicateOf(
+        withChecks([{ id: "V-C3", name: "Near reuse", result: "fail", detail: "Near reuse check could not complete" }]),
+      ),
+    ).toBeNull();
   });
 });

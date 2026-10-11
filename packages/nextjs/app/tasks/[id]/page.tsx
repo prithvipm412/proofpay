@@ -12,7 +12,7 @@ import { STATUS_LABEL, TaskStatus, escrowAbi } from "~~/utils/proofpay/escrow";
 import { formatMon, formatTimeLeft, shortAddress } from "~~/utils/proofpay/format";
 import { currentReport, jobMessage } from "~~/utils/proofpay/reports";
 import { settings } from "~~/utils/proofpay/settings";
-import { isFinal } from "~~/utils/proofpay/taskActions";
+import { isFinal, refundNote } from "~~/utils/proofpay/taskActions";
 
 const parseId = (value: unknown): bigint | null =>
   typeof value === "string" && /^[1-9]\d{0,15}$/.test(value) && Number.isSafeInteger(Number(value))
@@ -55,12 +55,12 @@ const TaskDetail = () => {
   const reports = reportsQuery.data ?? [];
   const report = currentReport(reports, task.attempts, task.proofHash);
   const earlier = reports.filter(r => r.attempt < task.attempts);
-  const left = (deadline: bigint) =>
-    Number.isFinite(now) ? (formatTimeLeft(Number(deadline) - now) ?? "0 seconds") : "…";
+  const left = (deadline: bigint) => (Number.isFinite(now) ? (formatTimeLeft(Number(deadline) - now) ?? "Ended") : "…");
   const status = task.status as TaskStatus;
   const poster = address?.toLowerCase() === task.poster.toLowerCase();
   const steps = ["Posted", "Accepted", "Proof sent", "Approved", "Paid"];
   const stage = status === TaskStatus.Refunded ? -1 : status === TaskStatus.Disputed ? 3 : status;
+  const refundReason = refundNote(task, now, poster);
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-5">
@@ -147,6 +147,7 @@ const TaskDetail = () => {
             </div>
           )}
         </dl>
+        {refundReason && <p className="text-sm text-warn">{refundReason}</p>}
         {status === TaskStatus.Approved && Number(task.disputeUntil) > now && (
           <p className="text-sm text-warn">
             {poster ? "Time left to dispute" : "Payment unlocks in"}: {left(task.disputeUntil)}

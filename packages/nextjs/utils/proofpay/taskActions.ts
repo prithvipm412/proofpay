@@ -45,3 +45,18 @@ export function taskActions(
 export function pollDelay(failures: number, final = false): number | false {
   return final ? false : Math.min(24_000, 3_000 * 2 ** Math.max(0, failures - 1));
 }
+
+/** Demo step 9 (C-21): why a refund is available now, in plain words. Null when no refund is open. */
+export function refundNote(task: Task, now: number, isPoster: boolean): string | null {
+  if (!Number.isFinite(now)) return null;
+  const reason =
+    task.status === TaskStatus.Accepted && task.attempts === 3
+      ? "All 3 attempts were used without an approval."
+      : (task.status === TaskStatus.Open || task.status === TaskStatus.Accepted) && now >= Number(task.submitBy)
+        ? "The time to send proof has ended."
+        : task.status === TaskStatus.Submitted && now >= Number(task.reviewBy)
+          ? "The review time has ended without a recorded result."
+          : null;
+  if (!reason) return null;
+  return isPoster ? `${reason} You can take your MON back with Refund.` : `${reason} The poster can take the MON back.`;
+}
