@@ -11,6 +11,7 @@ import { formatMon, shortAddress } from "~~/utils/proofpay/format";
 const NAV = [
   { href: "/tasks", label: "Tasks" },
   { href: "/tasks/new", label: "Post a task" },
+  { href: "/my-tasks", label: "My tasks" },
 ];
 
 /** F-04: short address, MON balance and a "Get test MON" link. */

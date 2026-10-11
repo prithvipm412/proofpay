@@ -18,9 +18,9 @@ export function useTaskCount() {
 }
 
 /** Reads the newest tasks in one multicall. */
-export function useRecentTasks() {
+export function useRecentTasks(window = BOARD_WINDOW) {
   const { data: count, error: countError } = useTaskCount();
-  const ids = count ? newestIds(count, BOARD_WINDOW) : [];
+  const ids = count ? newestIds(count, window) : [];
   const { data, error, isLoading } = useReadContracts({
     contracts: ids.map(id => ({ ...escrow, functionName: "getTask", args: [id] }) as const),
     query: { enabled: ids.length > 0, refetchInterval: 10_000 },
@@ -28,7 +28,13 @@ export function useRecentTasks() {
   const tasks = (data ?? []).flatMap((r, i) =>
     r.status === "success" ? [{ id: ids[i], task: r.result as unknown as Task }] : [],
   );
-  return { tasks, loading: count === undefined || (ids.length > 0 && isLoading), error: countError ?? error };
+  const partialFailure = data?.some(r => r.status === "failure");
+  return {
+    tasks,
+    count,
+    loading: count === undefined || (ids.length > 0 && isLoading),
+    error: countError ?? error ?? (partialFailure ? new Error("Some tasks could not be read.") : null),
+  };
 }
 
 export function useTask(id: bigint | null, refetchInterval: number | false = false) {
