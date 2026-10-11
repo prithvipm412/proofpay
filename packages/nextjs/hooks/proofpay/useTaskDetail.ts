@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { usePublicClient, useReadContract } from "wagmi";
 import { monadTestnet } from "~~/utils/proofpay/chain";
@@ -12,7 +12,10 @@ import { isFinal, pollDelay } from "~~/utils/proofpay/taskActions";
 /** F-17: independent reads keep refund/release available if the report service is down. */
 export function useTaskDetail(id: bigint | null) {
   const client = usePublicClient({ chainId: monadTestnet.id });
-  const failures = useMemo(() => ({ task: 0, reports: 0 }), [id]);
+  // Error streaks for the F-17 backoff; a new task ID starts a new streak.
+  const streak = useRef({ id, task: 0, reports: 0 });
+  if (streak.current.id !== id) streak.current = { id, task: 0, reports: 0 };
+  const failures = streak.current;
   const taskQuery = useQuery({
     queryKey: ["proofpay-task", settings.escrowAddress, id?.toString()],
     enabled: !!client && id !== null,
