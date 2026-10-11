@@ -3,11 +3,13 @@
 Run from verifier/:
     .venv/bin/python scripts/setup_env.py                                # fill empty settings only
     .venv/bin/python scripts/setup_env.py --signer-from-keystore verifier
+    .venv/bin/python scripts/setup_env.py --add-cors-origin https://proofpay-xyz.vercel.app   # M8
 
 1. Each EMPTY non-secret setting gets the section 8 value. A setting that has a value is not changed.
 2. With --signer-from-keystore NAME, the script runs `cast wallet private-key --account NAME`
    (cast asks for the keystore password), checks that the key's address equals the contract's
    verifier() address, and writes VERIFIER_PRIVATE_KEY. It prints only the address, never the key.
+3. With --add-cors-origin URL, the origin is added to CORS_ORIGINS IF it is not there (V-05, V-CFG6).
 The file is rewritten atomically with mode 600.
 """
 
@@ -88,9 +90,24 @@ def key_from_keystore(name: str) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--signer-from-keystore", metavar="NAME")
+    parser.add_argument("--add-cors-origin", metavar="URL")
     parser.add_argument("--env-file", default=str(ENV_FILE))
     args = parser.parse_args()
     path = pathlib.Path(args.env_file)
+
+    if args.add_cors_origin:
+        from app.config import _origin_ok
+
+        origin = args.add_cors_origin.strip().rstrip("/")
+        if not _origin_ok(origin):
+            print(f"STOP: {origin!r} is not an http(s) origin such as https://proofpay-xyz.vercel.app. Nothing written.")
+            return 1
+        origins = [o.strip() for o in read_env_file(path).get("CORS_ORIGINS", "").split(",") if o.strip()]
+        if origin in origins:
+            print(f"{origin} is already in CORS_ORIGINS.")
+        else:
+            set_values(path, {"CORS_ORIGINS": ",".join(origins + [origin])}, only_if_empty=False)
+            print(f"Added {origin} to CORS_ORIGINS ({len(origins) + 1} origins). Restart the verifier to use it.")
 
     filled = set_values(path, DEFAULTS, only_if_empty=True)
     print("Filled empty settings:", ", ".join(filled) if filled else "none")

@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Local only: NEXT_DIST_DIR lets a production build run next to `yarn start` (which uses .next).
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   reactStrictMode: true,
   devIndicators: false,
   typescript: {

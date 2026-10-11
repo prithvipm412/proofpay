@@ -30,3 +30,26 @@ def test_replaces_signer_key(tmp_path):
     setup_env.set_values(env, {"VERIFIER_PRIVATE_KEY": "0x" + "1" * 64}, only_if_empty=False)
     assert read_env_file(env)["VERIFIER_PRIVATE_KEY"] == "0x" + "1" * 64
     assert env.read_text().count("VERIFIER_PRIVATE_KEY") == 1
+
+
+def run_main(monkeypatch, env, *args):
+    monkeypatch.setattr("sys.argv", ["setup_env.py", "--env-file", str(env), *args])
+    return setup_env.main()
+
+
+def test_M8_add_cors_origin_appends_once_and_keeps_secrets(tmp_path, monkeypatch, capsys):
+    env = tmp_path / ".env"
+    env.write_text("CORS_ORIGINS=http://localhost:3000\nVISION_API_KEY=secret\n")
+    assert run_main(monkeypatch, env, "--add-cors-origin", "https://proofpay-xyz.vercel.app/") == 0
+    assert read_env_file(env)["CORS_ORIGINS"] == "http://localhost:3000,https://proofpay-xyz.vercel.app"
+    assert run_main(monkeypatch, env, "--add-cors-origin", "https://proofpay-xyz.vercel.app") == 0
+    assert read_env_file(env)["CORS_ORIGINS"].count("vercel.app") == 1
+    assert read_env_file(env)["VISION_API_KEY"] == "secret"
+    assert "secret" not in capsys.readouterr().out
+
+
+def test_M8_add_cors_origin_rejects_a_bad_origin(tmp_path, monkeypatch):
+    env = tmp_path / ".env"
+    env.write_text("CORS_ORIGINS=http://localhost:3000\n")
+    assert run_main(monkeypatch, env, "--add-cors-origin", "proofpay.vercel.app/path") == 1
+    assert read_env_file(env)["CORS_ORIGINS"] == "http://localhost:3000"
