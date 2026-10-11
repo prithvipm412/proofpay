@@ -24,7 +24,8 @@ from .config import Settings
 log = logging.getLogger("proofpay.vision")
 
 MAX_TOKENS = 1024  # V-M1, raised from 200 (decision 2026-10-04: thinking tokens count toward the limit)
-MAX_REPLY_CHARS = 2000  # V-M4
+MAX_REPLY_CHARS = 2000  # V-M4: the answer part of the reply
+MAX_REPLY_WITH_THOUGHT_CHARS = 16000  # whole reply when it starts with one visible thought block (see parse_reply)
 MAX_CALL_TIMEOUT_S = 45  # V-M1
 TIMEOUT_MARGIN_S = 90  # V-M1: timeout = min(45, remaining - 90)
 MIN_CALL_TIMEOUT_S = 15  # V-M1
@@ -44,6 +45,7 @@ If the two photos do not clearly show the same place, set "same_location" to fal
 If you are not sure that the work is complete, set "task_completed" to false."""
 
 _FENCE = re.compile(r"^```(?:json|JSON)?[ \t]*\n?(.*?)\n?[ \t]*```$", re.S)
+_THOUGHT = re.compile(r"^\s*<thought>.*?</thought>", re.S)
 
 
 class ModelVerdict(BaseModel):
@@ -81,6 +83,15 @@ def parse_reply(text: str | None) -> ModelVerdict:
     """V-M4 strict parse."""
     if text is None:
         raise ParseError("empty reply")
+    if len(text) > MAX_REPLY_WITH_THOUGHT_CHARS:
+        raise ParseError(f"reply longer than {MAX_REPLY_WITH_THOUGHT_CHARS} characters")
+    # gemma-4 sometimes writes its reasoning as one leading <thought>...</thought> block before the
+    # answer (measured 2026-10-12, input-dependent, same reply at temperature 0). Remove that one
+    # block only; the rest goes through the unchanged V-M4 rules, so a second block, an unclosed
+    # block or any other text still fails.
+    thought = _THOUGHT.match(text)
+    if thought:
+        text = text[thought.end():]
     if len(text) > MAX_REPLY_CHARS:
         raise ParseError(f"reply longer than {MAX_REPLY_CHARS} characters")
     body = text.strip()

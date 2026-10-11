@@ -66,6 +66,42 @@ def test_VM4_one_pair_of_code_fences_is_removed():
     assert parse_reply("```\n" + model_reply() + "\n```").confidence == 86
 
 
+THOUGHT = "<thought>The user wants me to evaluate the task.\n*   `task_completed`: true\n</thought>"
+
+
+def test_VM4_one_leading_thought_block_is_removed():
+    assert parse_reply(THOUGHT + "```json\n" + model_reply() + "\n```").confidence == 86
+    assert parse_reply(THOUGHT + model_reply(confidence=71)).confidence == 71
+    assert parse_reply("\n" + THOUGHT + "\n" + model_reply()).confidence == 86
+    long_thought = "<thought>" + "x" * 10_000 + "</thought>"  # the answer part keeps the 2000 limit
+    assert parse_reply(long_thought + model_reply()).confidence == 86
+
+
+def test_VM4_thought_json_is_never_used():
+    inner = model_reply(confidence=99)
+    assert parse_reply("<thought>" + inner + "</thought>" + model_reply(confidence=12)).confidence == 12
+    with pytest.raises(ParseError):
+        parse_reply("<thought>" + inner + "</thought>")  # no answer after the block
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        THOUGHT + THOUGHT + model_reply(),  # two blocks
+        "<thought>never closed " + model_reply(),  # unclosed block
+        model_reply() + THOUGHT,  # block after the answer
+        "Sure. " + THOUGHT + model_reply(),  # text before the block
+        THOUGHT + "Here it is: " + model_reply(),  # text after the block
+        "<thought>a</thought>b</thought>" + model_reply(),  # split at the first closing tag
+        THOUGHT + " " * 1990 + model_reply(),  # answer part longer than 2000 characters
+        "<thought>" + "x" * 16_000 + "</thought>" + model_reply(),  # whole reply longer than 16000
+    ],
+)
+def test_VM4_thought_block_edge_cases_are_rejected(text):
+    with pytest.raises(ParseError):
+        parse_reply(text)
+
+
 def test_VT9_non_json_two_times_fails_the_round(tmp_path):
     v, counted = vision_with(tmp_path, FakeModel(["not json", "still not json"]))
     with pytest.raises(RoundFailed):
