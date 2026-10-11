@@ -2,13 +2,18 @@
 
 Rules: `AGENTS.md` (= `CLAUDE.md`). Full log: `PROGRESS.md`. Owner target: submit 13 Oct 2026 before 12:00 IST.
 
-## Current state (2026-10-12, overnight session; owner asleep until about 9 AM)
+## Current state (2026-10-12 about 03:30 IST, overnight session; owner asleep until about 9 AM)
 
 - M0–M4: DONE. Contract deployed and verified: `10143:0x0f8ae1306c78fcf7bf998f8b8ee88add1bd7a0cf`.
-- M5: IN PROGRESS (calibration not closed; see below). M6: code done; owner tests open (phone test moved to M8 by the owner).
-- M7: IN PROGRESS. Code and local tests are done: `scripts/trust_local.py` (9/9 PASS), `scripts/trust_testnet.py --rehearse` (9/9 PASS), frontend notices for demo steps 8/9, V-M4 thought-block parse fix. Left: the owner runs `scripts/trust_testnet.py` on testnet (PROGRESS "Needs owner" item 1), then the agent copies the hashes and marks M7 DONE.
-- M8: next (backup.py/restore.py + V-T16, hosting prep, README). Owner overnight rule: do not stop to ask; record decisions in PROGRESS; put owner steps in PROGRESS "Needs owner"; write a morning summary at the top of PROGRESS when only owner items are left.
-- Running in the agent session: live verifier (port 8000, log `verifier-data/logs/verifier-live.log`) and `yarn start` (port 3000, log `verifier-data/logs/next-dev.log`). They stop when the session ends.
+- M5: IN PROGRESS. `docs/calibration.md` is written as a PROPOSAL (21 pairs, V-C11 PASS at NEAR_HARD 4); owner approval open.
+- M6: code done; owner tests open (two accounts; phone test moved to M8).
+- M7: IN PROGRESS. Code + local tests done (`trust_local.py` 9/9, `trust_testnet.py --rehearse` 9/9, demo 8/9 notices, V-M4 thought-block fix). Open: owner runs `verifier/scripts/trust_testnet.py` (PROGRESS Needs owner B).
+- M8: IN PROGRESS. Done: backup/restore (V-B1, V-B2, V-T16) + first real backup (02:27); README; deploy helpers (`scripts/deploy_frontend.py`, `setup_env.py --add-cors-origin`); ngrok header + quota-friendly polling; `blocked_nonce.py`. A readonly restore check of the 02:27 backup runs in the agent session (port 8002, output `verifier-data/logs/restore-20261012-a.out`). Open: ngrok, Vercel, Privy domains, phone test, admission choice, AI tools list (Needs owner A, C–F).
+- M9 prep done: `docs/demo-script.md`, `docs/pitch.md`, `docs/brand/logo.png|svg`, `docs/brand/cover.png|svg`, `docs/release-gate.md` (15.1 evidence; testnet parts open).
+- **The owner's to-do list is PROGRESS.md "Needs owner" (A to G, in order).** Every decision of this session is in PROGRESS "Decisions" (2026-10-12 entries).
+- Running in the agent session: live verifier (port 8000, log `verifier-data/logs/verifier-live.log`), `yarn start` (port 3000, log `verifier-data/logs/next-dev.log`), restore check (port 8002). They stop when the session ends.
+- Tests now: forge 67, verifier pytest 337, frontend Vitest 92 (all pass); `next build` passes (`NEXT_DIST_DIR=.next-build yarn build`).
+- Agent-only notes: the agent cannot read `~/Desktop` (macOS privacy prompt; an `ls` hangs). Do not run `yarn vercel <anything>`: the template script starts a deploy. Headless Chrome screenshots: `verifier-data/scratch/cdp_shot.py URL OUT.png W H WAIT` (DevTools protocol; plain `--screenshot` hangs because the page polls).
 
 ## Left in M5
 

@@ -33,6 +33,7 @@ Do these in this order. Commands are for macOS zsh. `~/proofpay` is the repo. Ea
 5. Optional: open `http://localhost:3000/tasks/<R4 task number>` in the browser and look at the red "Duplicate photo" notice (demo step 8).
 6. Tell the agent. The hashes are saved in `verifier-data/trust-testnet-<time>.json`; the agent copies them into "Important transactions" and marks M7 DONE.
 - IF a step prints `FAIL` or `ERROR`: keep the output and the log file it names (`verifier-data/logs/trust-testnet-verifier-*.log`) for the agent, and start the normal verifier again (step 4 command).
+- Each run makes 4 checks for the `deployer` poster; the cap is 10 per poster per UTC day (V-A2), so at most 2 full runs fit in one UTC day (the UTC day changes at 05:30 IST).
 
 **C. M8 backup test (after B; about 1 h, no attention needed).** A backup was made at 02:27 IST, before B. After B made new accepted proofs, the restore must show them.
 1. `cd ~/proofpay/verifier && .venv/bin/python scripts/restore.py ../verifier-data/backups/proofpay-backup-10143-0x0f8ae1306c78fcf7bf998f8b8ee88add1bd7a0cf-20261011T205705Z.tar.gz`
